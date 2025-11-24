@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"time"
 
+	sdkapi "github.com/steemit/steemgosdk/api"
+	"github.com/steemit/steemgosdk/auth"
+	"github.com/steemit/steemgosdk/broadcast"
 	"github.com/steemit/steemgosdk/consts"
 	"github.com/steemit/steemutil/jsonrpc2"
 	"github.com/steemit/steemutil/protocol"
@@ -226,6 +229,21 @@ func (c *Client) BroadcastRawOps(ops []protocol.Operation, priv *wif.PrivateKey)
 	}
 	_, err = c.BroadcastSync([]any{tx})
 	return
+}
+
+// GetAPI returns an API instance for making RPC calls.
+func (c *Client) GetAPI() *sdkapi.API {
+	return sdkapi.NewAPI(c.Url)
+}
+
+// GetBroadcast returns a Broadcast instance for signing and broadcasting transactions.
+func (c *Client) GetBroadcast() *broadcast.Broadcast {
+	return broadcast.NewBroadcast(c, c.Url)
+}
+
+// GetAuth returns an Auth instance for authentication and key management.
+func (c *Client) GetAuth() *auth.Auth {
+	return auth.NewAuth()
 }
 
 func checkKeyType(keyType string) (r bool) {
