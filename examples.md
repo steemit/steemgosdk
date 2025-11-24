@@ -2,6 +2,8 @@
 
 This document provides practical examples for using the Steem Go SDK.
 
+> **⚠️ Security Warning**: The private keys used in the examples below (`5JRaypasxMx1L97ZUX7YuC5Psb5EAbF821kkAGtBj7xCJFQcbLg`) are **test/example keys only**. They are publicly known and should **NEVER** be used in production. Always generate your own private keys from your account name and password using the `auth.ToWif()` or `auth.GetPrivateKeys()` methods.
+
 ## Table of Contents
 
 1. [Basic Setup](#basic-setup)
@@ -194,6 +196,8 @@ func main() {
     }
     
     // Your posting private key in WIF format
+    // WARNING: This is a test/example key. NEVER use it in production!
+    // Generate your own key using: auth.ToWif(accountName, password, "posting")
     postingWif := "5JRaypasxMx1L97ZUX7YuC5Psb5EAbF821kkAGtBj7xCJFQcbLg"
     
     // Broadcast the vote
@@ -232,6 +236,7 @@ func main() {
     }
     
     // Your active private key in WIF format
+    // WARNING: This is a test/example key. NEVER use it in production!
     activeWif := "5JRaypasxMx1L97ZUX7YuC5Psb5EAbF821kkAGtBj7xCJFQcbLg"
     
     // Broadcast the transfer
@@ -266,6 +271,7 @@ func main() {
     recipientMemoKey := "STM8m5UgaFAAYQRuaNejYdS8FVLVp9Ss3K1qAVk5de6F8s3HnVbvA"
     
     // Your memo private key
+    // WARNING: This is a test/example key. NEVER use it in production!
     yourMemoWif := "5JRaypasxMx1L97ZUX7YuC5Psb5EAbF821kkAGtBj7xCJFQcbLg"
     
     // Encrypt the memo (memos starting with '#' are encrypted)
@@ -284,6 +290,7 @@ func main() {
     }
     
     // Your active private key
+    // WARNING: This is a test/example key. NEVER use it in production!
     activeWif := "5JRaypasxMx1L97ZUX7YuC5Psb5EAbF821kkAGtBj7xCJFQcbLg"
     
     // Broadcast the transfer
@@ -325,6 +332,7 @@ func main() {
     }
     
     // Your posting private key
+    // WARNING: This is a test/example key. NEVER use it in production!
     postingWif := "5JRaypasxMx1L97ZUX7YuC5Psb5EAbF821kkAGtBj7xCJFQcbLg"
     
     // Broadcast the comment
@@ -373,6 +381,7 @@ func main() {
     }
     
     // Prepare private keys (posting key for both operations)
+    // WARNING: This is a test/example key. NEVER use it in production!
     privKeys := map[string]string{
         "posting": "5JRaypasxMx1L97ZUX7YuC5Psb5EAbF821kkAGtBj7xCJFQcbLg",
     }
@@ -497,6 +506,7 @@ func main() {
     client := steemgosdk.GetClient("https://api.steemit.com")
     auth := client.GetAuth()
     
+    // WARNING: This is a test/example key. NEVER use it in production!
     wif := "5JRaypasxMx1L97ZUX7YuC5Psb5EAbF821kkAGtBj7xCJFQcbLg"
     pubKey := "STM8m5UgaFAAYQRuaNejYdS8FVLVp9Ss3K1qAVk5de6F8s3HnVbvA"
     
@@ -537,6 +547,7 @@ func main() {
     auth := client.GetAuth()
     
     // Sender's memo private key
+    // WARNING: This is a test/example key. NEVER use it in production!
     senderMemoWif := "5JRaypasxMx1L97ZUX7YuC5Psb5EAbF821kkAGtBj7xCJFQcbLg"
     
     // Recipient's memo public key
@@ -554,6 +565,7 @@ func main() {
     fmt.Printf("Encrypted memo: %s\n", encryptedMemo)
     
     // Decrypt memo (recipient uses their memo private key)
+    // WARNING: This is a test/example key. NEVER use it in production!
     recipientMemoWif := "5JRaypasxMx1L97ZUX7YuC5Psb5EAbF821kkAGtBj7xCJFQcbLg"
     decryptedMemo, err := auth.DecodeMemo(recipientMemoWif, encryptedMemo)
     if err != nil {
@@ -608,6 +620,7 @@ func main() {
     }
     
     // 3. Get private key (in production, store securely)
+    // WARNING: This is a test/example key. NEVER use it in production!
     activeWif := "5JRaypasxMx1L97ZUX7YuC5Psb5EAbF821kkAGtBj7xCJFQcbLg"
     
     // Or generate from account name and password
@@ -691,6 +704,7 @@ func main() {
 ## Notes
 
 - **Security**: Never hardcode private keys or passwords in production code. Use environment variables or secure key management systems.
+- **Test Private Keys**: The private key `5JRaypasxMx1L97ZUX7YuC5Psb5EAbF821kkAGtBj7xCJFQcbLg` used in examples is a **test/example key only**. It is publicly known and should **NEVER** be used in production. Always use your own private keys generated from your account name and password.
 - **Error Handling**: Always check errors returned by SDK methods.
 - **Network**: The examples use `https://api.steemit.com` as the default node. You can use any Steem node URL.
 - **WIF Format**: Private keys should be in Wallet Import Format (WIF), starting with '5'.
