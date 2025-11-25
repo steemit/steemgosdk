@@ -1,7 +1,10 @@
 package broadcast
 
 import (
+	"encoding/hex"
 	"encoding/json"
+	"fmt"
+	"os"
 	"time"
 
 	"github.com/pkg/errors"
@@ -56,6 +59,30 @@ func (b *Broadcast) Send(ops []protocol.Operation, privKeys map[string]string) (
 		return nil, errors.Wrap(err, "failed to prepare transaction")
 	}
 
+	// Print debug information if DEBUG environment variable is set
+	if os.Getenv("DEBUG") != "" {
+		// Print transaction for testing
+		txJSON, err := json.MarshalIndent(tx.Transaction, "", "  ")
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to marshal transaction to JSON")
+		}
+		fmt.Printf("=== Transaction (before signing) ===\n%s\n", string(txJSON))
+
+		// Serialize and print transaction bytes for testing
+		txBytes, err := tx.Serialize()
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to serialize transaction")
+		}
+		fmt.Printf("=== Transaction Bytes (hex) ===\n%s\n", hex.EncodeToString(txBytes))
+
+		// Compute and print digest for testing
+		digest, err := tx.Digest(transaction.SteemChain)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to compute digest")
+		}
+		fmt.Printf("=== Digest (hex) ===\n%s\n", hex.EncodeToString(digest))
+	}
+
 	// Convert WIF strings to PrivateKey objects
 	privKeyObjs := make([]*wif.PrivateKey, 0, len(privKeys))
 	for _, wifStr := range privKeys {
@@ -92,23 +119,38 @@ func (b *Broadcast) prepareTransaction(ops []protocol.Operation) (*transaction.S
 		return nil, errors.Wrap(err, "failed to get dynamic global properties")
 	}
 
-	// Calculate ref_block_num
-	refBlockNum := transaction.RefBlockNum(dgp.HeadBlockNumber)
+	// Calculate ref_block_num from last_irreversible_block_num
+	// ref_block_num = (last_irreversible_block_num - 1) & 0xFFFF
+	refBlockNum := transaction.RefBlockNum(protocol.UInt32((dgp.LastIrreversibleBlockNum - 1) & 0xFFFF))
 
-	// Calculate ref_block_prefix
-	refBlockPrefix, err := transaction.RefBlockPrefix(dgp.HeadBlockId)
+	// Get the block at last_irreversible_block_num to get its previous block ID
+	block, err := b.api.GetBlock(uint(dgp.LastIrreversibleBlockNum))
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get block for ref_block_prefix calculation")
+	}
+
+	// Calculate ref_block_prefix from the previous block ID (not the current block ID)
+	// This matches steemjs behavior: block.previous
+	previousBlockId := block.Previous
+	if previousBlockId == "" {
+		// Fallback to all zeros if previous is not available
+		previousBlockId = "0000000000000000000000000000000000000000"
+	}
+	refBlockPrefix, err := transaction.RefBlockPrefix(previousBlockId)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to calculate ref_block_prefix")
 	}
 
 	// Set expiration (default: 10 minutes from now)
-	expiration := time.Now().Add(600 * time.Second)
+	// Use UTC time to match steemjs behavior
+	expiration := time.Now().UTC().Add(600 * time.Second)
 
 	// Create transaction
 	tx := transaction.NewSignedTransaction(&transaction.Transaction{
 		RefBlockNum:    refBlockNum,
 		RefBlockPrefix: refBlockPrefix,
 		Expiration:     &protocol.Time{Time: &expiration},
+		Extensions:     []interface{}{}, // Initialize empty extensions
 	})
 
 	// Add operations
