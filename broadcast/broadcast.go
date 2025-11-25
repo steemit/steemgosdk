@@ -1,33 +1,51 @@
 package broadcast
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/pkg/errors"
+	"github.com/steemit/steemgosdk/api"
+	"github.com/steemit/steemutil/jsonrpc2"
 	"github.com/steemit/steemutil/protocol"
-	"github.com/steemit/steemutil/protocol/api"
 	"github.com/steemit/steemutil/transaction"
 	"github.com/steemit/steemutil/wif"
 )
 
-// ClientInterface defines the interface needed by Broadcast.
-type ClientInterface interface {
-	GetDynamicGlobalProperties() (*api.DynamicGlobalProperties, error)
-	BroadcastSync(params []interface{}) ([]byte, error)
-}
-
 // Broadcast provides methods to sign and broadcast transactions.
 type Broadcast struct {
-	client ClientInterface
-	url    string
+	url string
+	rpc *jsonrpc2.JsonRpc
+	api *api.API
 }
 
 // NewBroadcast creates a new Broadcast instance.
-func NewBroadcast(client ClientInterface, url string) *Broadcast {
+func NewBroadcast(url string) *Broadcast {
 	return &Broadcast{
-		client: client,
-		url:    url,
+		url: url,
+		rpc: jsonrpc2.NewClient(url),
+		api: api.NewAPI(url), // Create API instance internally for getting dynamic global properties
 	}
+}
+
+// BroadcastSync broadcasts a transaction synchronously to the Steem blockchain.
+func (b *Broadcast) BroadcastSync(params []interface{}) (resultJson []byte, err error) {
+	err = b.rpc.BuildSendData(
+		"condenser_api.broadcast_transaction_synchronous",
+		params,
+	)
+	if err != nil {
+		return
+	}
+	rpcResponse, err := b.rpc.Send()
+	if err != nil {
+		return
+	}
+	if rpcResponse.Error != nil {
+		return resultJson, errors.Errorf("failed to broadcast:%v\n", rpcResponse.Error)
+	}
+	resultJson, err = json.Marshal(rpcResponse.Result)
+	return
 }
 
 // Send signs and broadcasts a transaction.
@@ -54,7 +72,7 @@ func (b *Broadcast) Send(ops []protocol.Operation, privKeys map[string]string) (
 	}
 
 	// Broadcast transaction
-	result, err := b.client.BroadcastSync([]interface{}{tx})
+	result, err := b.BroadcastSync([]interface{}{tx})
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to broadcast transaction")
 	}
@@ -69,7 +87,7 @@ func (b *Broadcast) prepareTransaction(ops []protocol.Operation) (*transaction.S
 	}
 
 	// Get dynamic global properties
-	dgp, err := b.client.GetDynamicGlobalProperties()
+	dgp, err := b.api.GetDynamicGlobalProperties()
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get dynamic global properties")
 	}
