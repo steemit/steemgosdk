@@ -59,7 +59,6 @@ package main
 import (
     "fmt"
     "github.com/steemit/steemgosdk"
-    "github.com/steemit/steemutil/protocol/api"
 )
 
 func main() {
@@ -67,8 +66,7 @@ func main() {
     api := client.GetAPI()
     
     // Get block by number
-    var block api.Block
-    err := api.CallWithResult("condenser_api", "get_block", []interface{}{1}, &block)
+    block, err := api.GetBlock(1)
     if err != nil {
         fmt.Printf("Error: %v\n", err)
         return
@@ -77,6 +75,34 @@ func main() {
     fmt.Printf("Block ID: %s\n", block.BlockID)
     fmt.Printf("Previous: %s\n", block.Previous)
     fmt.Printf("Timestamp: %s\n", block.Timestamp)
+}
+```
+
+### Get Multiple Blocks
+
+```go
+package main
+
+import (
+    "fmt"
+    "github.com/steemit/steemgosdk"
+)
+
+func main() {
+    client := steemgosdk.GetClient("https://api.steemit.com")
+    api := client.GetAPI()
+    
+    // Get blocks in range [from, to)
+    blocks, err := api.GetBlocks(10000000, 10000010)
+    if err != nil {
+        fmt.Printf("Error: %v\n", err)
+        return
+    }
+    
+    fmt.Printf("Retrieved %d blocks\n", len(blocks))
+    for _, wrapBlock := range blocks {
+        fmt.Printf("Block %d: %s\n", wrapBlock.BlockNum, wrapBlock.Block.BlockID)
+    }
 }
 ```
 
@@ -118,16 +144,13 @@ package main
 import (
     "fmt"
     "github.com/steemit/steemgosdk"
-    "github.com/steemit/steemutil/protocol/api"
 )
 
 func main() {
     client := steemgosdk.GetClient("https://api.steemit.com")
     api := client.GetAPI()
     
-    var dgp api.DynamicGlobalProperties
-    err := api.CallWithResult("condenser_api", "get_dynamic_global_properties", 
-        []interface{}{}, &dgp)
+    dgp, err := api.GetDynamicGlobalProperties()
     if err != nil {
         fmt.Printf("Error: %v\n", err)
         return
@@ -166,6 +189,65 @@ func main() {
     
     resultJSON, _ := json.MarshalIndent(result.Result, "", "  ")
     fmt.Println(string(resultJSON))
+}
+```
+
+### Get Transaction Hex
+
+```go
+package main
+
+import (
+    "encoding/hex"
+    "fmt"
+    "time"
+    "github.com/steemit/steemgosdk"
+    "github.com/steemit/steemutil/protocol"
+    "github.com/steemit/steemutil/transaction"
+)
+
+func main() {
+    client := steemgosdk.GetClient("https://api.steemit.com")
+    api := client.GetAPI()
+    
+    // Get dynamic global properties
+    dgp, err := api.GetDynamicGlobalProperties()
+    if err != nil {
+        fmt.Printf("Error: %v\n", err)
+        return
+    }
+    
+    // Create a transaction
+    refBlockPrefix, _ := transaction.RefBlockPrefix(dgp.HeadBlockId)
+    expiration := time.Now().Add(600 * time.Second)
+    tx := transaction.NewSignedTransaction(&transaction.Transaction{
+        RefBlockNum:    transaction.RefBlockNum(dgp.HeadBlockNumber),
+        RefBlockPrefix: refBlockPrefix,
+        Expiration:     &protocol.Time{Time: &expiration},
+    })
+    
+    // Add an operation
+    voteOp := &protocol.VoteOperation{
+        Voter:    "your-account-name",
+        Author:   "steemit",
+        Permlink: "firstpost",
+        Weight:   10000,
+    }
+    tx.PushOperation(voteOp)
+    
+    // Get transaction hex
+    txHex, err := api.GetTransactionHex(tx)
+    if err != nil {
+        fmt.Printf("Error: %v\n", err)
+        return
+    }
+    
+    // Serialize transaction locally for comparison
+    txBytes, _ := tx.Serialize()
+    localHex := hex.EncodeToString(txBytes)
+    
+    fmt.Printf("Transaction hex from API: %v\n", txHex)
+    fmt.Printf("Local transaction hex: %s00\n", localHex)
 }
 ```
 
@@ -601,15 +683,15 @@ func main() {
     auth := client.GetAuth()
     
     // 1. Check account balance (optional)
-    var account interface{}
-    err := api.CallWithResult("condenser_api", "get_accounts", []interface{}{
+    result, err := api.Call("condenser_api", "get_accounts", []interface{}{
         []interface{}{"your-account-name"},
-    }, &account)
+    })
     if err != nil {
         fmt.Printf("Error getting account: %v\n", err)
         return
     }
     fmt.Println("Account retrieved successfully")
+    fmt.Printf("Account data: %v\n", result.Result)
     
     // 2. Prepare transfer operation
     transferOp := &protocol.TransferOperation{
@@ -710,6 +792,8 @@ func main() {
 - **WIF Format**: Private keys should be in Wallet Import Format (WIF), starting with '5'.
 - **Public Keys**: Public keys should be in Steem format, starting with 'STM'.
 - **Memo Encryption**: Memos starting with '#' are automatically encrypted. Plain text memos are sent as-is.
+- **API Methods**: The SDK provides convenient methods like `GetBlock()`, `GetBlocks()`, `GetDynamicGlobalProperties()`, and `GetTransactionHex()` in the `API` instance. Use these instead of generic `Call()` when possible for better type safety and simpler code.
+- **Broadcast**: The `Broadcast` instance automatically handles transaction preparation (ref_block_num, ref_block_prefix, expiration) and signing. You only need to provide operations and private keys. The Broadcast instance internally creates an API instance for fetching dynamic global properties.
 
 ## Additional Resources
 

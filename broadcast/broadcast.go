@@ -1,33 +1,54 @@
 package broadcast
 
 import (
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"os"
 	"time"
 
 	"github.com/pkg/errors"
+	"github.com/steemit/steemgosdk/api"
+	"github.com/steemit/steemutil/jsonrpc2"
 	"github.com/steemit/steemutil/protocol"
-	"github.com/steemit/steemutil/protocol/api"
 	"github.com/steemit/steemutil/transaction"
 	"github.com/steemit/steemutil/wif"
 )
 
-// ClientInterface defines the interface needed by Broadcast.
-type ClientInterface interface {
-	GetDynamicGlobalProperties() (*api.DynamicGlobalProperties, error)
-	BroadcastSync(params []interface{}) ([]byte, error)
-}
-
 // Broadcast provides methods to sign and broadcast transactions.
 type Broadcast struct {
-	client ClientInterface
-	url    string
+	url string
+	rpc *jsonrpc2.JsonRpc
+	api *api.API
 }
 
 // NewBroadcast creates a new Broadcast instance.
-func NewBroadcast(client ClientInterface, url string) *Broadcast {
+func NewBroadcast(url string) *Broadcast {
 	return &Broadcast{
-		client: client,
-		url:    url,
+		url: url,
+		rpc: jsonrpc2.NewClient(url),
+		api: api.NewAPI(url), // Create API instance internally for getting dynamic global properties
 	}
+}
+
+// BroadcastSync broadcasts a transaction synchronously to the Steem blockchain.
+func (b *Broadcast) BroadcastSync(params []interface{}) (resultJson []byte, err error) {
+	err = b.rpc.BuildSendData(
+		"condenser_api.broadcast_transaction_synchronous",
+		params,
+	)
+	if err != nil {
+		return
+	}
+	rpcResponse, err := b.rpc.Send()
+	if err != nil {
+		return
+	}
+	if rpcResponse.Error != nil {
+		return resultJson, errors.Errorf("failed to broadcast:%v\n", rpcResponse.Error)
+	}
+	resultJson, err = json.Marshal(rpcResponse.Result)
+	return
 }
 
 // Send signs and broadcasts a transaction.
@@ -36,6 +57,30 @@ func (b *Broadcast) Send(ops []protocol.Operation, privKeys map[string]string) (
 	tx, err := b.prepareTransaction(ops)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to prepare transaction")
+	}
+
+	// Print debug information if DEBUG environment variable is set
+	if os.Getenv("DEBUG") != "" {
+		// Print transaction for testing
+		txJSON, err := json.MarshalIndent(tx.Transaction, "", "  ")
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to marshal transaction to JSON")
+		}
+		fmt.Printf("=== Transaction (before signing) ===\n%s\n", string(txJSON))
+
+		// Serialize and print transaction bytes for testing
+		txBytes, err := tx.Serialize()
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to serialize transaction")
+		}
+		fmt.Printf("=== Transaction Bytes (hex) ===\n%s\n", hex.EncodeToString(txBytes))
+
+		// Compute and print digest for testing
+		digest, err := tx.Digest(transaction.SteemChain)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to compute digest")
+		}
+		fmt.Printf("=== Digest (hex) ===\n%s\n", hex.EncodeToString(digest))
 	}
 
 	// Convert WIF strings to PrivateKey objects
@@ -54,7 +99,7 @@ func (b *Broadcast) Send(ops []protocol.Operation, privKeys map[string]string) (
 	}
 
 	// Broadcast transaction
-	result, err := b.client.BroadcastSync([]interface{}{tx})
+	result, err := b.BroadcastSync([]interface{}{tx})
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to broadcast transaction")
 	}
@@ -69,28 +114,43 @@ func (b *Broadcast) prepareTransaction(ops []protocol.Operation) (*transaction.S
 	}
 
 	// Get dynamic global properties
-	dgp, err := b.client.GetDynamicGlobalProperties()
+	dgp, err := b.api.GetDynamicGlobalProperties()
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get dynamic global properties")
 	}
 
-	// Calculate ref_block_num
-	refBlockNum := transaction.RefBlockNum(dgp.HeadBlockNumber)
+	// Calculate ref_block_num from last_irreversible_block_num
+	// ref_block_num = (last_irreversible_block_num - 1) & 0xFFFF
+	refBlockNum := transaction.RefBlockNum(protocol.UInt32((dgp.LastIrreversibleBlockNum - 1) & 0xFFFF))
 
-	// Calculate ref_block_prefix
-	refBlockPrefix, err := transaction.RefBlockPrefix(dgp.HeadBlockId)
+	// Get the block at last_irreversible_block_num to get its previous block ID
+	block, err := b.api.GetBlock(uint(dgp.LastIrreversibleBlockNum))
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get block for ref_block_prefix calculation")
+	}
+
+	// Calculate ref_block_prefix from the previous block ID (not the current block ID)
+	// This matches steemjs behavior: block.previous
+	previousBlockId := block.Previous
+	if previousBlockId == "" {
+		// Fallback to all zeros if previous is not available
+		previousBlockId = "0000000000000000000000000000000000000000"
+	}
+	refBlockPrefix, err := transaction.RefBlockPrefix(previousBlockId)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to calculate ref_block_prefix")
 	}
 
 	// Set expiration (default: 10 minutes from now)
-	expiration := time.Now().Add(600 * time.Second)
+	// Use UTC time to match steemjs behavior
+	expiration := time.Now().UTC().Add(600 * time.Second)
 
 	// Create transaction
 	tx := transaction.NewSignedTransaction(&transaction.Transaction{
 		RefBlockNum:    refBlockNum,
 		RefBlockPrefix: refBlockPrefix,
 		Expiration:     &protocol.Time{Time: &expiration},
+		Extensions:     []interface{}{}, // Initialize empty extensions
 	})
 
 	// Add operations
