@@ -3,11 +3,13 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/pkg/errors"
 	"github.com/steemit/steemutil/jsonrpc2"
 	protocolapi "github.com/steemit/steemutil/protocol/api"
+	"github.com/steemit/steemutil/rpc"
 	"github.com/steemit/steemutil/transaction"
 )
 
@@ -15,6 +17,7 @@ import (
 type API struct {
 	url      string
 	maxRetry int
+	seqNo    int // Sequence number for RPC requests
 }
 
 // WrapBlock represents a block with its block number.
@@ -56,6 +59,86 @@ func (a *API) Call(apiName, method string, params []interface{}) (*protocolapi.R
 	}
 
 	return rpcResponse, nil
+}
+
+// SignedCall makes a signed RPC call to the specified API method.
+// This method is used for authenticated API calls that require proof of account ownership.
+// Only HTTP transport is supported for signed calls.
+func (a *API) SignedCall(method string, params []interface{}, account string, privateKey string) (*protocolapi.RpcResultData, error) {
+	// Validate that we're using HTTP transport
+	if err := a.validateTransportForSignedCall(); err != nil {
+		return nil, err
+	}
+
+	// Increment sequence number for unique request ID
+	a.seqNo++
+
+	// Create RPC request
+	request := &rpc.RpcRequest{
+		Method: method,
+		Params: params,
+		ID:     a.seqNo,
+	}
+
+	// Sign the request
+	signedRequest, err := rpc.Sign(request, account, []string{privateKey})
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to sign request for method %s", method)
+	}
+
+	// Create JSON-RPC client
+	rpcClient := jsonrpc2.NewClient(a.url)
+
+	// Marshal signed request to get the params
+	signedParams := map[string]interface{}{
+		"__signed": signedRequest.Params.Signed,
+	}
+
+	// Build and send the signed request
+	err = rpcClient.BuildSendData(method, []interface{}{signedParams})
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to build signed RPC data for %s", method)
+	}
+
+	rpcResponse, err := rpcClient.Send()
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to send signed RPC request for %s", method)
+	}
+
+	if rpcResponse.Error != nil {
+		return nil, errors.Errorf("signed RPC error for %s: %v", method, rpcResponse.Error)
+	}
+
+	return rpcResponse, nil
+}
+
+// SignedCallWithResult makes a signed RPC call and unmarshals the result into the provided result object.
+func (a *API) SignedCallWithResult(method string, params []interface{}, account string, privateKey string, result interface{}) error {
+	rpcResponse, err := a.SignedCall(method, params, account, privateKey)
+	if err != nil {
+		return err
+	}
+
+	resultBytes, err := json.Marshal(rpcResponse.Result)
+	if err != nil {
+		return errors.Wrapf(err, "failed to marshal signed RPC result for %s", method)
+	}
+	
+	if err := json.Unmarshal(resultBytes, result); err != nil {
+		return errors.Wrapf(err, "failed to unmarshal signed RPC result for %s", method)
+	}
+
+	return nil
+}
+
+// validateTransportForSignedCall ensures that signed calls are only made over HTTP.
+// WebSocket transport is not supported for signed calls due to the nature of the signing protocol.
+func (a *API) validateTransportForSignedCall() error {
+	// Check if URL uses HTTP/HTTPS
+	if !strings.HasPrefix(a.url, "http://") && !strings.HasPrefix(a.url, "https://") {
+		return errors.New("signed calls can only be made when using HTTP transport")
+	}
+	return nil
 }
 
 // CallWithResult makes an RPC call and unmarshals the result into the provided result object.

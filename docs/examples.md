@@ -8,9 +8,10 @@ This document provides practical examples for using the Steem Go SDK.
 
 1. [Basic Setup](#basic-setup)
 2. [API Examples](#api-examples)
-3. [Broadcast Examples](#broadcast-examples)
-4. [Auth Examples](#auth-examples)
-5. [Complete Examples](#complete-examples)
+3. [SignedCall Examples](#signedcall-examples)
+4. [Broadcast Examples](#broadcast-examples)
+5. [Auth Examples](#auth-examples)
+6. [Complete Examples](#complete-examples)
 
 ## Basic Setup
 
@@ -248,6 +249,179 @@ func main() {
     
     fmt.Printf("Transaction hex from API: %v\n", txHex)
     fmt.Printf("Local transaction hex: %s00\n", localHex)
+}
+```
+
+## SignedCall Examples
+
+### Basic Signed API Call
+
+```go
+package main
+
+import (
+    "fmt"
+    "log"
+    "github.com/steemit/steemgosdk"
+    "github.com/steemit/steemgosdk/consts"
+)
+
+func main() {
+    client := steemgosdk.GetClient("https://api.steemit.com")
+    client.AccountName = "your-account"
+    
+    // Import your active key
+    err := client.ImportWif(consts.ACTIVE_KEY, "your-active-key-wif")
+    if err != nil {
+        log.Fatal(err)
+    }
+    
+    // Get account information with authentication
+    var accounts []map[string]interface{}
+    err = client.SignedCallWithResult(
+        "condenser_api.get_accounts",
+        []interface{}{[]string{"your-account"}},
+        consts.ACTIVE_KEY,
+        &accounts,
+    )
+    if err != nil {
+        log.Fatal(err)
+    }
+    
+    if len(accounts) > 0 {
+        account := accounts[0]
+        fmt.Printf("Account: %s\n", account["name"])
+        fmt.Printf("Balance: %s\n", account["balance"])
+        fmt.Printf("SBD Balance: %s\n", account["sbd_balance"])
+    }
+}
+```
+
+### Get Account History (Authenticated)
+
+```go
+func getAccountHistory(client *steemgosdk.Client, account string) {
+    var history []interface{}
+    err := client.SignedCallWithResult(
+        "condenser_api.get_account_history",
+        []interface{}{account, -1, 100},
+        consts.ACTIVE_KEY,
+        &history,
+    )
+    if err != nil {
+        log.Printf("Failed to get account history: %v", err)
+        return
+    }
+    
+    fmt.Printf("Retrieved %d history entries\n", len(history))
+    
+    // Process history entries
+    for _, entry := range history {
+        if entryArray, ok := entry.([]interface{}); ok && len(entryArray) >= 2 {
+            if op, ok := entryArray[1].(map[string]interface{}); ok {
+                opType := op["op"].([]interface{})[0]
+                fmt.Printf("Operation: %s\n", opType)
+            }
+        }
+    }
+}
+```
+
+### Batch Signed Calls
+
+```go
+func performBatchSignedCalls(client *steemgosdk.Client, account string) {
+    operations := []struct {
+        name   string
+        method string
+        params []interface{}
+    }{
+        {
+            name:   "Get Account Info",
+            method: "condenser_api.get_accounts",
+            params: []interface{}{[]string{account}},
+        },
+        {
+            name:   "Get Followers",
+            method: "condenser_api.get_followers",
+            params: []interface{}{account, "", "blog", 100},
+        },
+        {
+            name:   "Get Following",
+            method: "condenser_api.get_following",
+            params: []interface{}{account, "", "blog", 100},
+        },
+    }
+    
+    for _, op := range operations {
+        fmt.Printf("Executing: %s...", op.name)
+        
+        var result interface{}
+        err := client.SignedCallWithResult(op.method, op.params, consts.ACTIVE_KEY, &result)
+        if err != nil {
+            fmt.Printf(" Failed: %v\n", err)
+            continue
+        }
+        
+        if resultArray, ok := result.([]interface{}); ok {
+            fmt.Printf(" Success (%d items)\n", len(resultArray))
+        } else {
+            fmt.Printf(" Success\n")
+        }
+    }
+}
+```
+
+### Error Handling for Signed Calls
+
+```go
+func robustSignedCall(client *steemgosdk.Client, method string, params []interface{}) {
+    var result interface{}
+    err := client.SignedCallWithResult(method, params, consts.ACTIVE_KEY, &result)
+    
+    switch {
+    case err == nil:
+        fmt.Printf("Call succeeded: %v\n", result)
+        
+    case strings.Contains(err.Error(), "transport"):
+        log.Printf("Transport error - check URL scheme: %v", err)
+        
+    case strings.Contains(err.Error(), "expired"):
+        log.Printf("Signature expired - implement retry logic: %v", err)
+        
+    case strings.Contains(err.Error(), "key"):
+        log.Printf("Authentication error - check credentials: %v", err)
+        
+    default:
+        log.Printf("Unexpected error: %v", err)
+    }
+}
+```
+
+### Using Direct API Methods
+
+```go
+func directAPISignedCall() {
+    client := steemgosdk.GetClient("https://api.steemit.com")
+    api := client.GetAPI()
+    
+    // Direct API call with explicit credentials
+    response, err := api.SignedCall(
+        "condenser_api.get_dynamic_global_properties",
+        []interface{}{},
+        "your-account",
+        "your-private-key-wif",
+    )
+    if err != nil {
+        log.Fatal(err)
+    }
+    
+    var dgp map[string]interface{}
+    if err := json.Unmarshal(response.Result, &dgp); err != nil {
+        log.Fatal(err)
+    }
+    
+    fmt.Printf("Head block: %.0f\n", dgp["head_block_number"])
 }
 ```
 
