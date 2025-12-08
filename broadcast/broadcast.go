@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sort"
 	"time"
 
 	"github.com/pkg/errors"
@@ -98,6 +99,51 @@ func (b *Broadcast) Send(ops []protocol.Operation, privKeys map[string]string) (
 		return nil, errors.Wrap(err, "failed to sign transaction")
 	}
 
+	// Debug: Verify signature recovery if DEBUG is set
+	if os.Getenv("DEBUG") != "" && len(tx.Transaction.Signatures) > 0 {
+		digest, err := tx.Digest(transaction.SteemChain)
+		if err == nil {
+			// Decode first signature
+			sigHex := tx.Transaction.Signatures[0]
+			sigBytes, err := hex.DecodeString(sigHex)
+			if err == nil {
+				// Recover public key from signature
+				recoveredPubKey, err := wif.RecoverPublicKeyFromSignature(digest, sigBytes)
+				if err == nil {
+					recoveredPubKeyStr := recoveredPubKey.ToStr()
+					fmt.Printf("=== Signature Recovery ===\n")
+					fmt.Printf("Recovered Public Key from Signature: %s\n", recoveredPubKeyStr)
+
+					// Compare with expected public key from first private key
+					if len(privKeyObjs) > 0 {
+						expectedPubKeyStr := privKeyObjs[0].ToPubKeyStr()
+						fmt.Printf("Expected Public Key (from WIF): %s\n", expectedPubKeyStr)
+						if recoveredPubKeyStr == expectedPubKeyStr {
+							fmt.Printf("✅ Recovered public key matches expected public key\n")
+						} else {
+							fmt.Printf("❌ Recovered public key does NOT match expected public key\n")
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// Debug: Print signed transaction before broadcast
+	if os.Getenv("DEBUG") != "" {
+		txJSON, err := json.MarshalIndent(tx.Transaction, "", "  ")
+		if err == nil {
+			fmt.Printf("=== Transaction (after signing, before broadcast) ===\n%s\n", string(txJSON))
+		}
+		// Print signatures
+		if len(tx.Transaction.Signatures) > 0 {
+			fmt.Printf("=== Signatures ===\n")
+			for i, sig := range tx.Transaction.Signatures {
+				fmt.Printf("Signature %d: %s\n", i, sig)
+			}
+		}
+	}
+
 	// Broadcast transaction
 	result, err := b.BroadcastSync([]interface{}{tx})
 	if err != nil {
@@ -166,5 +212,49 @@ func (b *Broadcast) SendWith(op protocol.Operation, privKeyWif string) ([]byte, 
 	privKeys := map[string]string{
 		"key": privKeyWif,
 	}
+	return b.Send([]protocol.Operation{op}, privKeys)
+}
+
+// CustomJson creates and broadcasts a custom_json operation.
+// This method matches the steem-js broadcast.customJson() interface.
+//
+// Parameters:
+//   - requiredAuths: List of accounts that must provide active authority (can be empty)
+//   - requiredPostingAuths: List of accounts that must provide posting authority (can be empty)
+//   - id: Custom operation ID (e.g., "follow", "notify", etc.)
+//   - json: JSON string containing the operation data
+//   - privKeyWif: Private key in WIF format (posting or active key depending on required auths)
+//
+// Returns the broadcast result or an error.
+func (b *Broadcast) CustomJson(requiredAuths, requiredPostingAuths []string, id, json, privKeyWif string) ([]byte, error) {
+	// Sort required_auths and required_posting_auths to ensure consistent serialization
+	// This matches steem-js behavior where flat_set fields are sorted
+	sortedRequiredAuths := make([]string, len(requiredAuths))
+	copy(sortedRequiredAuths, requiredAuths)
+	sort.Strings(sortedRequiredAuths)
+
+	sortedRequiredPostingAuths := make([]string, len(requiredPostingAuths))
+	copy(sortedRequiredPostingAuths, requiredPostingAuths)
+	sort.Strings(sortedRequiredPostingAuths)
+
+	op := &protocol.CustomJSONOperation{
+		RequiredAuths:        sortedRequiredAuths,
+		RequiredPostingAuths: sortedRequiredPostingAuths,
+		ID:                   id,
+		JSON:                 json,
+	}
+
+	// Determine which key type to use based on required auths
+	// If requiredAuths is not empty, we need active key
+	// If only requiredPostingAuths is set, we need posting key
+	keyType := "posting"
+	if len(requiredAuths) > 0 {
+		keyType = "active"
+	}
+
+	privKeys := map[string]string{
+		keyType: privKeyWif,
+	}
+
 	return b.Send([]protocol.Operation{op}, privKeys)
 }

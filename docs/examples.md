@@ -957,11 +957,196 @@ func main() {
 }
 ```
 
+## CustomJson Examples
+
+### Basic CustomJson Operation
+
+```go
+package main
+
+import (
+    "encoding/json"
+    "fmt"
+    "github.com/steemit/steemgosdk"
+)
+
+func main() {
+    client := steemgosdk.GetClient("https://api.steemit.com")
+    broadcast := client.GetBroadcast()
+    
+    // Create a follow operation using custom_json
+    followData := []interface{}{
+        "follow",
+        map[string]interface{}{
+            "follower": "your-account-name",
+            "following": "steemit",
+            "what": []string{"blog"},
+        },
+    }
+    
+    jsonStr, _ := json.Marshal(followData)
+    
+    // Broadcast custom_json operation
+    // Parameters: requiredAuths, requiredPostingAuths, id, json, privKeyWif
+    result, err := broadcast.CustomJson(
+        []string{},                    // required_auths (empty for posting auth)
+        []string{"your-account-name"}, // required_posting_auths
+        "follow",                      // id
+        string(jsonStr),               // json
+        "your-posting-private-key",    // posting WIF
+    )
+    if err != nil {
+        fmt.Printf("Error: %v\n", err)
+        return
+    }
+    
+    fmt.Printf("CustomJson operation broadcasted: %s\n", string(result))
+}
+```
+
+### Notify Operation (setLastRead)
+
+```go
+package main
+
+import (
+    "encoding/json"
+    "fmt"
+    "time"
+    "github.com/steemit/steemgosdk"
+)
+
+func main() {
+    client := steemgosdk.GetClient("https://api.steemit.com")
+    broadcast := client.GetBroadcast()
+    
+    // Create a notify operation to set last read date
+    notifyData := []interface{}{
+        "setLastRead",
+        map[string]interface{}{
+            "date": time.Now().UTC().Format(time.RFC3339),
+        },
+    }
+    
+    jsonStr, _ := json.Marshal(notifyData)
+    
+    // Broadcast custom_json operation
+    result, err := broadcast.CustomJson(
+        []string{},                    // required_auths (empty)
+        []string{"your-account-name"}, // required_posting_auths
+        "notify",                      // id
+        string(jsonStr),               // json
+        "your-posting-private-key",    // posting WIF
+    )
+    if err != nil {
+        fmt.Printf("Error: %v\n", err)
+        return
+    }
+    
+    fmt.Printf("Notify operation broadcasted: %s\n", string(result))
+}
+```
+
+### CustomJson with Active Authority
+
+```go
+package main
+
+import (
+    "encoding/json"
+    "fmt"
+    "github.com/steemit/steemgosdk"
+)
+
+func main() {
+    client := steemgosdk.GetClient("https://api.steemit.com")
+    broadcast := client.GetBroadcast()
+    
+    // Create custom operation data
+    customData := map[string]interface{}{
+        "action": "custom_action",
+        "data":   "some custom data",
+    }
+    
+    jsonStr, _ := json.Marshal(customData)
+    
+    // Broadcast custom_json operation with active authority
+    // When requiredAuths is not empty, active key is required
+    result, err := broadcast.CustomJson(
+        []string{"your-account-name"}, // required_auths (requires active key)
+        []string{},                    // required_posting_auths (empty)
+        "custom_id",                   // id
+        string(jsonStr),               // json
+        "your-active-private-key",     // active WIF
+    )
+    if err != nil {
+        fmt.Printf("Error: %v\n", err)
+        return
+    }
+    
+    fmt.Printf("CustomJson with active auth broadcasted: %s\n", string(result))
+}
+```
+
+### Using CustomJSONOperation Directly
+
+```go
+package main
+
+import (
+    "encoding/json"
+    "fmt"
+    "github.com/steemit/steemgosdk"
+    "github.com/steemit/steemutil/protocol"
+)
+
+func main() {
+    client := steemgosdk.GetClient("https://api.steemit.com")
+    broadcast := client.GetBroadcast()
+    
+    // Create CustomJSONOperation directly
+    followData := []interface{}{
+        "follow",
+        map[string]interface{}{
+            "follower": "your-account-name",
+            "following": "steemit",
+            "what": []string{"blog"},
+        },
+    }
+    
+    jsonStr, _ := json.Marshal(followData)
+    
+    op := &protocol.CustomJSONOperation{
+        RequiredAuths:        []string{},
+        RequiredPostingAuths: []string{"your-account-name"},
+        ID:                   "follow",
+        JSON:                 string(jsonStr),
+    }
+    
+    // Use SendWith to broadcast
+    privKeys := map[string]string{
+        "posting": "your-posting-private-key",
+    }
+    
+    result, err := broadcast.Send([]protocol.Operation{op}, privKeys)
+    if err != nil {
+        fmt.Printf("Error: %v\n", err)
+        return
+    }
+    
+    fmt.Printf("CustomJSONOperation broadcasted: %s\n", string(result))
+}
+```
+
 ## Notes
 
 - **Security**: Never hardcode private keys or passwords in production code. Use environment variables or secure key management systems.
 - **Test Private Keys**: The private key `5JRaypasxMx1L97ZUX7YuC5Psb5EAbF821kkAGtBj7xCJFQcbLg` used in examples is a **test/example key only**. It is publicly known and should **NEVER** be used in production. Always use your own private keys generated from your account name and password.
 - **Error Handling**: Always check errors returned by SDK methods.
+- **CustomJson Authority**: 
+  - If `requiredAuths` is not empty, you need to provide an **active** private key
+  - If only `requiredPostingAuths` is set, you need to provide a **posting** private key
+  - The `CustomJson()` method automatically determines which key type to use based on the provided auths
 - **Network**: The examples use `https://api.steemit.com` as the default node. You can use any Steem node URL.
 - **WIF Format**: Private keys should be in Wallet Import Format (WIF), starting with '5'.
 - **Public Keys**: Public keys should be in Steem format, starting with 'STM'.
