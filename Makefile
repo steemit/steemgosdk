@@ -41,3 +41,8 @@ test-short:
 test-skip-network:
 	@$(call print, "Running unit tests skipping network tests...")
 	@go test ./... -short -run '^[^N]'
+
+.PHONY: list-versions
+list-versions:
+	@$(call print, "Listing all available versions of github.com/steemit/steemgosdk...")
+	@go list -m -versions github.com/steemit/steemgosdk
