@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/pkg/errors"
 	"github.com/steemit/steemutil/jsonrpc2"
@@ -123,7 +122,7 @@ func (a *API) SignedCallWithResult(method string, params []interface{}, account 
 	if err != nil {
 		return errors.Wrapf(err, "failed to marshal signed RPC result for %s", method)
 	}
-	
+
 	if err := json.Unmarshal(resultBytes, result); err != nil {
 		return errors.Wrapf(err, "failed to unmarshal signed RPC result for %s", method)
 	}
@@ -214,24 +213,19 @@ func (a *API) GetBlock(blockNum uint) (block *protocolapi.Block, err error) {
 }
 
 // wrapGetBlock is a helper function that gets a block with retry logic.
+// This will ALWAYS eventually return, at all costs (similar to steem-python's reliable_query).
 func (a *API) wrapGetBlock(blockNum uint, ch chan<- *WrapBlock) {
 	var (
 		err   error
 		block *protocolapi.Block
 	)
 
-	for i := 0; i < a.maxRetry; i++ {
+	for {
 		block, err = a.GetBlock(blockNum)
 		if err == nil {
 			break
 		}
-		fmt.Printf("Retry get block {%+v} after 1 second.\n", blockNum)
-		time.Sleep(time.Second)
-	}
-	if err != nil {
-		fmt.Printf("wrapGetBlock err: %+v\n", err)
-		ch <- nil
-		return
+		fmt.Printf("Retry get block {%+v}: %v\n", blockNum, err)
 	}
 	ch <- &WrapBlock{
 		BlockNum: blockNum,
