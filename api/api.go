@@ -7,6 +7,7 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/steemit/steemutil/jsonrpc2"
+	"github.com/steemit/steemutil/protocol"
 	protocolapi "github.com/steemit/steemutil/protocol/api"
 	"github.com/steemit/steemutil/rpc"
 	"github.com/steemit/steemutil/transaction"
@@ -23,6 +24,12 @@ type API struct {
 type WrapBlock struct {
 	BlockNum uint
 	Block    *protocolapi.Block
+}
+
+// WrapOpsInBlock represents operations in a block with its block number.
+type WrapOpsInBlock struct {
+	BlockNum   uint
+	Operations []*protocol.OperationObject
 }
 
 // NewAPI creates a new API instance.
@@ -280,5 +287,77 @@ func (a *API) GetTransactionHex(tx *transaction.SignedTransaction) (result any, 
 		return result, errors.Errorf("failed to GetTransactionHex:%v\n", rpcResponse.Error)
 	}
 	result = rpcResponse.Result
+	return
+}
+
+// GetOpsInBlock gets operations in a block by block number.
+// If onlyVirtual is false, returns all operations (both regular and virtual).
+// If onlyVirtual is true, returns only virtual operations.
+func (a *API) GetOpsInBlock(blockNum uint, onlyVirtual bool) (ops []*protocol.OperationObject, err error) {
+	rpc := jsonrpc2.NewClient(a.url)
+	err = rpc.BuildSendData(
+		"condenser_api.get_ops_in_block",
+		[]any{blockNum, onlyVirtual},
+	)
+	if err != nil {
+		return
+	}
+	rpcResponse, err := rpc.Send()
+	if err != nil {
+		return
+	}
+	if rpcResponse.Error != nil {
+		return ops, errors.Errorf("failed to GetOpsInBlock:%v\n", rpcResponse.Error)
+	}
+	tmp, err := json.Marshal(rpcResponse.Result)
+	if err != nil {
+		return
+	}
+	err = json.Unmarshal(tmp, &ops)
+	return
+}
+
+// wrapGetOpsInBlock is a helper function that gets operations in a block with retry logic.
+// This will ALWAYS eventually return, at all costs (similar to steem-python's reliable_query).
+func (a *API) wrapGetOpsInBlock(blockNum uint, onlyVirtual bool, ch chan<- *WrapOpsInBlock) {
+	var (
+		err error
+		ops []*protocol.OperationObject
+	)
+
+	for {
+		ops, err = a.GetOpsInBlock(blockNum, onlyVirtual)
+		if err == nil {
+			break
+		}
+		fmt.Printf("Retry get ops in block {%+v}: %v\n", blockNum, err)
+	}
+	ch <- &WrapOpsInBlock{
+		BlockNum:   blockNum,
+		Operations: ops,
+	}
+}
+
+// GetOpsInBlocks gets operations in multiple blocks in the range [from, to).
+// If onlyVirtual is false, returns all operations (both regular and virtual).
+// If onlyVirtual is true, returns only virtual operations.
+// Returns a map keyed by block number for easy lookup.
+func (a *API) GetOpsInBlocks(from, to uint, onlyVirtual bool) (opsMap map[uint][]*protocol.OperationObject, err error) {
+	// check params
+	if from >= to {
+		return opsMap, errors.Errorf("unexpected params {from: %v}, {to: %v}\n", from, to)
+	}
+	// init
+	ch := make(chan *WrapOpsInBlock, to-from)
+	opsMap = make(map[uint][]*protocol.OperationObject, to-from)
+	// get operations
+	for i := from; i < to; i++ {
+		go a.wrapGetOpsInBlock(i, onlyVirtual, ch)
+	}
+	// get results
+	for i := from; i < to; i++ {
+		result := <-ch
+		opsMap[result.BlockNum] = result.Operations
+	}
 	return
 }
