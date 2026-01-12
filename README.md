@@ -52,6 +52,10 @@ func main() {
 ### Making API Calls
 
 ```go
+import (
+    "github.com/steemit/steemutil/protocol"
+)
+
 // Get account information
 api := client.GetAPI()
 accounts, err := api.GetAccounts([]string{"steemit"})
@@ -59,8 +63,11 @@ if err != nil {
     log.Fatal(err)
 }
 
-fmt.Printf("Account: %s, Reputation: %d\n", 
-    accounts[0].Name, accounts[0].Reputation)
+// Display raw reputation and converted reputation
+rawRep := accounts[0].Reputation
+repLog10 := protocol.RepLog10(rawRep)
+fmt.Printf("Account: %s, Raw Reputation: %d, Reputation Score: %d\n", 
+    accounts[0].Name, rawRep, repLog10)
 ```
 
 ### Broadcasting Transactions

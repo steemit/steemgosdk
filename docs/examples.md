@@ -137,6 +137,42 @@ func main() {
 }
 ```
 
+### Get Account Information with Reputation Calculation
+
+```go
+package main
+
+import (
+    "fmt"
+    "github.com/steemit/steemgosdk"
+    "github.com/steemit/steemutil/protocol"
+)
+
+func main() {
+    client := steemgosdk.GetClient("https://api.steemit.com")
+    api := client.GetAPI()
+    
+    // Get account information
+    accounts, err := api.GetAccounts([]string{"steemit"})
+    if err != nil {
+        fmt.Printf("Error: %v\n", err)
+        return
+    }
+    
+    if len(accounts) > 0 {
+        account := accounts[0]
+        rawRep := account.Reputation
+        
+        // Convert raw reputation to log10 format
+        repLog10 := protocol.RepLog10(rawRep)
+        
+        fmt.Printf("Account: %s\n", account.Name)
+        fmt.Printf("Raw Reputation: %d\n", rawRep)
+        fmt.Printf("Reputation Score (log10): %d\n", repLog10)
+    }
+}
+```
+
 ### Get Dynamic Global Properties
 
 ```go
