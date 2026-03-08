@@ -11,6 +11,7 @@ A comprehensive Go SDK for interacting with the Steem blockchain, providing high
 - **SignedCall Support**: Authenticated RPC calls compatible with steem-js
 - **Key Management**: Secure private key handling and WIF import/export
 - **Type Safety**: Strongly typed Go structs for all Steem data types
+- **Steem URI Protocol**: Encode/decode `steem://` URIs for transaction signing workflows
 - **Easy Integration**: Simple, intuitive API designed for Go developers
 
 ## 📦 Installation
@@ -107,6 +108,7 @@ fmt.Printf("✅ Authenticated call successful: %+v\n", result)
 
 - **[Examples](docs/examples.md)** - Comprehensive examples for all SDK features
 - **[SignedCall API](docs/signed-call.md)** - Authenticated RPC calls documentation
+- **[Steem URI Examples](docs/examples.md#steem-uri-examples)** - Encode/decode steem:// URIs
 
 ### API Reference
 
@@ -131,6 +133,12 @@ The SDK is organized into several key components:
 - Private key management
 - WIF import/export
 - Key derivation from username/password
+
+#### 🔗 Steem URI (`steemuri` package)
+- Encode transactions/operations to `steem://` URIs (`EncodeTx`, `EncodeOp`, `EncodeOps`)
+- Decode `steem://`, `web+steem://`, `ext+steem://` URIs (`Decode`)
+- Resolve transaction placeholders like `__signer`, `__expiration` (`ResolveTransaction`)
+- Resolve callback URL template variables (`ResolveCallback`)
 
 ## 🛠️ Advanced Usage
 
