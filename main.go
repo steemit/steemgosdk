@@ -5,6 +5,7 @@ import (
 	"github.com/steemit/steemgosdk/auth"
 	"github.com/steemit/steemgosdk/broadcast"
 	"github.com/steemit/steemgosdk/client"
+	"github.com/steemit/steemgosdk/steemuri"
 )
 
 // GetClient creates a new Client instance.
@@ -26,3 +27,21 @@ type Broadcast = broadcast.Broadcast
 
 // Auth represents the auth layer for authentication and key management.
 type Auth = auth.Auth
+
+// SteemURI type aliases for the steemuri package.
+type SteemURIParameters = steemuri.Parameters
+type SteemURIDecodeResult = steemuri.DecodeResult
+type SteemURIResolveOptions = steemuri.ResolveOptions
+type SteemURIResolveResult = steemuri.ResolveResult
+type SteemURITransactionConfirmation = steemuri.TransactionConfirmation
+type SteemURIEncodeProtocol = steemuri.EncodeProtocol
+
+// SteemURI function wrappers.
+var (
+	SteemURIDecode             = steemuri.Decode
+	SteemURIResolveTransaction = steemuri.ResolveTransaction
+	SteemURIResolveCallback    = steemuri.ResolveCallback
+	SteemURIEncodeTx           = steemuri.EncodeTx
+	SteemURIEncodeOp           = steemuri.EncodeOp
+	SteemURIEncodeOps          = steemuri.EncodeOps
+)
