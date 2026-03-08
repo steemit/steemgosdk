@@ -11,7 +11,8 @@ This document provides practical examples for using the Steem Go SDK.
 3. [SignedCall Examples](#signedcall-examples)
 4. [Broadcast Examples](#broadcast-examples)
 5. [Auth Examples](#auth-examples)
-6. [Complete Examples](#complete-examples)
+6. [Steem URI Examples](#steem-uri-examples)
+7. [Complete Examples](#complete-examples)
 
 ## Basic Setup
 
@@ -866,6 +867,123 @@ func main() {
     }
     fmt.Printf("Decrypted memo: %s\n", decryptedMemo)
 }
+```
+
+## Steem URI Examples
+
+The `steemuri` package implements the [Steem URI Signing Protocol](https://github.com/steemit/steem-uri-spec), allowing you to encode Steem transactions into shareable `steem://` links and decode them back.
+
+### Encode a Single Operation to URI
+
+```go
+package main
+
+import (
+    "fmt"
+    "github.com/steemit/steemgosdk/steemuri"
+)
+
+func main() {
+    // Create a vote operation (as a JSON-compatible slice)
+    voteOp := []interface{}{"vote", map[string]interface{}{
+        "voter":    "alice",
+        "author":   "bob",
+        "permlink": "my-post",
+        "weight":   10000,
+    }}
+
+    // Encode to a steem URI (default protocol: web+steem)
+    uri, err := steemuri.EncodeOp(voteOp, steemuri.Parameters{}, "")
+    if err != nil {
+        fmt.Printf("Error: %v\n", err)
+        return
+    }
+
+    fmt.Println(uri)
+    // Output: web+steem://sign/op/WyJ2b3RlIix7...
+}
+```
+
+### Encode with Parameters
+
+```go
+// Encode with signer and callback URL
+params := steemuri.Parameters{
+    Signer:   "alice",
+    Callback: "https://myapp.com/callback?tx={{id}}",
+}
+
+uri, err := steemuri.EncodeOp(voteOp, params, steemuri.ProtocolSteem)
+// Output: steem://sign/op/...?s=alice&cb=...
+```
+
+### Encode Multiple Operations
+
+```go
+transferOp := []interface{}{"transfer", map[string]interface{}{
+    "from":   "alice",
+    "to":     "bob",
+    "amount": "1.000 STEEM",
+    "memo":   "Hello!",
+}}
+
+ops := []interface{}{voteOp, transferOp}
+uri, err := steemuri.EncodeOps(ops, steemuri.Parameters{}, "")
+```
+
+### Decode a Steem URI
+
+```go
+result, err := steemuri.Decode(uri)
+if err != nil {
+    fmt.Printf("Error: %v\n", err)
+    return
+}
+
+fmt.Printf("Transaction: %v\n", result.Tx)
+fmt.Printf("Signer: %s\n", result.Params.Signer)
+fmt.Printf("Callback: %s\n", result.Params.Callback)
+```
+
+### Resolve Transaction Placeholders
+
+After decoding, transactions may contain placeholders (`__signer`, `__ref_block_num`, etc.) that need to be resolved before signing:
+
+```go
+result, _ := steemuri.Decode(uri)
+
+resolved, err := steemuri.ResolveTransaction(result.Tx, result.Params, steemuri.ResolveOptions{
+    RefBlockNum:     1234,
+    RefBlockPrefix:  5678900,
+    Expiration:      "2025-01-01T00:00:00",
+    Signers:         []string{"alice", "bob"},
+    PreferredSigner: "alice",
+})
+if err != nil {
+    fmt.Printf("Error: %v\n", err)
+    return
+}
+
+fmt.Printf("Signer: %s\n", resolved.Signer)
+fmt.Printf("Resolved TX: %v\n", resolved.Tx)
+```
+
+### Resolve Callback URL
+
+After a transaction is confirmed, resolve template variables in the callback URL:
+
+```go
+callbackURL := "https://myapp.com/cb?sig={{sig}}&id={{id}}&block={{block}}&txn={{txn}}"
+ctx := steemuri.TransactionConfirmation{
+    Sig:   "2050a...",
+    ID:    "abc123",
+    Block: 12345678,
+    Txn:   0,
+}
+
+resolved := steemuri.ResolveCallback(callbackURL, ctx)
+fmt.Println(resolved)
+// Output: https://myapp.com/cb?sig=2050a...&id=abc123&block=12345678&txn=0
 ```
 
 ## Complete Examples
