@@ -1,40 +1,38 @@
 name: Test
-on:
-  workflow_dispatch:
 
-env:
-  # go needs absolute directories, using the $HOME variable doesn't work here.
-  GOCACHE: /home/runner/work/go/pkg/build
-  GOPATH: /home/runner/work/go
-  GO_VERSION: 1.18
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
 
 jobs:
-  test-cover:
-    name: Unit coverage
+  test:
+    name: Unit tests
     runs-on: ubuntu-latest
     steps:
-      - name: Set up Go
-        uses: actions/setup-go@v3
-        with:
-          go-version: ${{ env.GO_VERSION }}
-
       - name: Check out source
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      #- name: Test
-      #  run: make unit-cover
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Run tests with coverage
+        run: make test-cover
 
   test-race:
-    name: Unit race
+    name: Race detector
     runs-on: ubuntu-latest
     steps:
-      - name: Set up Go
-        uses: actions/setup-go@v3
-        with:
-          go-version: ${{ env.GO_VERSION }}
-
       - name: Check out source
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      #- name: Test
-      #  run: make unit-race
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Run tests with race detector
+        run: make test-race
