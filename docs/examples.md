@@ -10,6 +10,8 @@ This document provides practical examples for using the Steem Go SDK.
 2. [API Examples](#api-examples)
 3. [SignedCall Examples](#signedcall-examples)
 4. [Broadcast Examples](#broadcast-examples)
+   - [Post with Comment Options (Beneficiaries)](#post-with-comment-options-beneficiaries)
+   - [Post with Comment Options (No Beneficiaries)](#post-with-comment-options-no-beneficiaries)
 5. [Auth Examples](#auth-examples)
 6. [Steem URI Examples](#steem-uri-examples)
 7. [Complete Examples](#complete-examples)
@@ -639,6 +641,145 @@ func main() {
 }
 ```
 
+### Post with Comment Options (Beneficiaries)
+
+Use `CommentOptionsOperation` to set beneficiaries who will receive a portion of the post rewards:
+
+```go
+package main
+
+import (
+    "encoding/json"
+    "fmt"
+    "time"
+    "github.com/steemit/steemgosdk"
+    "github.com/steemit/steemutil/protocol"
+)
+
+func main() {
+    client := steemgosdk.GetClient("https://api.steemit.com")
+    broadcast := client.GetBroadcast()
+
+    author := "your-account-name"
+    permlink := "my-post-with-beneficiaries"
+    tags := []string{"test", "steem"}
+
+    jsonMeta, _ := json.Marshal(map[string]interface{}{
+        "tags": tags,
+        "app":  "steemgosdk/1.0",
+    })
+
+    // Create comment operation
+    commentOp := &protocol.CommentOperation{
+        ParentAuthor:   "",
+        ParentPermlink: tags[0],
+        Author:         author,
+        Permlink:       permlink,
+        Title:          "Post with Beneficiaries",
+        Body:           "This post has beneficiaries set.",
+        JsonMetadata:   string(jsonMeta),
+    }
+
+    // Define beneficiaries (weight is in basis points: 3000 = 30%)
+    // Note: steemutil v0.0.19+ automatically sorts beneficiaries alphabetically
+    beneficiaries := []protocol.Beneficiary{
+        {Account: "alice", Weight: 2000},  // 20%
+        {Account: "bob", Weight: 1000},    // 10%
+    }
+
+    // Create comment options with beneficiaries extension
+    optionsOp := &protocol.CommentOptionsOperation{
+        Author:               author,
+        Permlink:             permlink,
+        MaxAcceptedPayout:    "1000000.000 SBD",
+        PercentSteemDollars:  10000,
+        AllowVotes:           true,
+        AllowCurationRewards: true,
+        Extensions: protocol.CommentOptionsExtensions{
+            protocol.NewBeneficiariesExtension(beneficiaries),
+        },
+    }
+
+    // Broadcast both operations in one transaction
+    // WARNING: This is a test/example key. NEVER use it in production!
+    postingWif := "5JRaypasxMx1L97ZUX7YuC5Psb5EAbF821kkAGtBj7xCJFQcbLg"
+
+    result, err := broadcast.Send([]protocol.Operation{commentOp, optionsOp}, map[string]string{
+        "posting": postingWif,
+    })
+    if err != nil {
+        fmt.Printf("Error: %v\n", err)
+        return
+    }
+
+    fmt.Printf("Post with beneficiaries broadcasted: %s\n", string(result))
+}
+```
+
+### Post with Comment Options (No Beneficiaries)
+
+You can also use `CommentOptionsOperation` without setting beneficiaries:
+
+```go
+package main
+
+import (
+    "encoding/json"
+    "fmt"
+    "time"
+    "github.com/steemit/steemgosdk"
+    "github.com/steemit/steemutil/protocol"
+)
+
+func main() {
+    client := steemgosdk.GetClient("https://api.steemit.com")
+    broadcast := client.GetBroadcast()
+
+    author := "your-account-name"
+    permlink := "my-post-with-options"
+    tags := []string{"test", "steem"}
+
+    jsonMeta, _ := json.Marshal(map[string]interface{}{
+        "tags": tags,
+        "app":  "steemgosdk/1.0",
+    })
+
+    commentOp := &protocol.CommentOperation{
+        ParentAuthor:   "",
+        ParentPermlink: tags[0],
+        Author:         author,
+        Permlink:       permlink,
+        Title:          "Post with Options",
+        Body:           "This post has comment options but no beneficiaries.",
+        JsonMetadata:   string(jsonMeta),
+    }
+
+    // Comment options with empty extensions (no beneficiaries)
+    optionsOp := &protocol.CommentOptionsOperation{
+        Author:               author,
+        Permlink:             permlink,
+        MaxAcceptedPayout:    "1000000.000 SBD",
+        PercentSteemDollars:  10000,
+        AllowVotes:           true,
+        AllowCurationRewards: true,
+        Extensions:           protocol.CommentOptionsExtensions{}, // Empty extensions
+    }
+
+    // WARNING: This is a test/example key. NEVER use it in production!
+    postingWif := "5JRaypasxMx1L97ZUX7YuC5Psb5EAbF821kkAGtBj7xCJFQcbLg"
+
+    result, err := broadcast.Send([]protocol.Operation{commentOp, optionsOp}, map[string]string{
+        "posting": postingWif,
+    })
+    if err != nil {
+        fmt.Printf("Error: %v\n", err)
+        return
+    }
+
+    fmt.Printf("Post with options broadcasted: %s\n", string(result))
+}
+```
+
 ### Multiple Operations in One Transaction
 
 ```go
@@ -654,7 +795,7 @@ import (
 func main() {
     client := steemgosdk.GetClient("https://api.steemit.com")
     broadcast := client.GetBroadcast()
-    
+
     // Create multiple operations
     voteOp := &protocol.VoteOperation{
         Voter:    "your-account-name",
@@ -662,7 +803,7 @@ func main() {
         Permlink: "firstpost",
         Weight:   10000,
     }
-    
+
     commentOp := &protocol.CommentOperation{
         ParentAuthor:   "steemit",
         ParentPermlink: "firstpost",
@@ -672,20 +813,20 @@ func main() {
         Body:           "Great post!",
         JsonMetadata:   "{}",
     }
-    
+
     // Prepare private keys (posting key for both operations)
     // WARNING: This is a test/example key. NEVER use it in production!
     privKeys := map[string]string{
         "posting": "5JRaypasxMx1L97ZUX7YuC5Psb5EAbF821kkAGtBj7xCJFQcbLg",
     }
-    
+
     // Broadcast multiple operations in one transaction
     result, err := broadcast.Send([]protocol.Operation{voteOp, commentOp}, privKeys)
     if err != nil {
         fmt.Printf("Error: %v\n", err)
         return
     }
-    
+
     fmt.Printf("Transaction with multiple operations broadcasted: %s\n", string(result))
 }
 ```
