@@ -52,6 +52,27 @@ func (b *Broadcast) BroadcastSync(params []interface{}) (resultJson []byte, err 
 	return
 }
 
+// BroadcastAsync broadcasts a transaction asynchronously to the Steem blockchain.
+// This returns immediately without waiting for block confirmation.
+// Use this for faster response times when you don't need immediate confirmation.
+func (b *Broadcast) BroadcastAsync(params []interface{}) error {
+	err := b.rpc.BuildSendData(
+		"condenser_api.broadcast_transaction",
+		params,
+	)
+	if err != nil {
+		return err
+	}
+	rpcResponse, err := b.rpc.Send()
+	if err != nil {
+		return err
+	}
+	if rpcResponse.Error != nil {
+		return errors.Errorf("failed to broadcast:%v\n", rpcResponse.Error)
+	}
+	return nil
+}
+
 // Send signs and broadcasts a transaction.
 func (b *Broadcast) Send(ops []protocol.Operation, privKeys map[string]string) ([]byte, error) {
 	// Prepare transaction
@@ -213,6 +234,50 @@ func (b *Broadcast) SendWith(op protocol.Operation, privKeyWif string) ([]byte, 
 		"key": privKeyWif,
 	}
 	return b.Send([]protocol.Operation{op}, privKeys)
+}
+
+// SendAsync signs and broadcasts a transaction asynchronously.
+// Returns the transaction ID immediately without waiting for block confirmation.
+func (b *Broadcast) SendAsync(ops []protocol.Operation, privKeys map[string]string) (trxId string, err error) {
+	// Prepare transaction
+	tx, err := b.prepareTransaction(ops)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to prepare transaction")
+	}
+
+	// Convert WIF strings to PrivateKey objects
+	privKeyObjs := make([]*wif.PrivateKey, 0, len(privKeys))
+	for _, wifStr := range privKeys {
+		privKey := &wif.PrivateKey{}
+		if err := privKey.FromWif(wifStr); err != nil {
+			return "", errors.Wrap(err, "failed to decode WIF")
+		}
+		privKeyObjs = append(privKeyObjs, privKey)
+	}
+
+	// Sign transaction
+	if err := tx.Sign(privKeyObjs, transaction.SteemChain); err != nil {
+		return "", errors.Wrap(err, "failed to sign transaction")
+	}
+
+	// Calculate transaction ID before broadcasting
+	trxId = tx.ID()
+
+	// Broadcast asynchronously
+	err = b.BroadcastAsync([]interface{}{tx})
+	if err != nil {
+		return "", errors.Wrap(err, "failed to broadcast transaction")
+	}
+
+	return trxId, nil
+}
+
+// SendWithAsync prepares and sends a transaction asynchronously with the given operation and private key.
+func (b *Broadcast) SendWithAsync(op protocol.Operation, privKeyWif string) (trxId string, err error) {
+	privKeys := map[string]string{
+		"key": privKeyWif,
+	}
+	return b.SendAsync([]protocol.Operation{op}, privKeys)
 }
 
 // CustomJson creates and broadcasts a custom_json operation.
