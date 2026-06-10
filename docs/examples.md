@@ -1433,6 +1433,38 @@ func main() {
 }
 ```
 
+### Witness Price Feed (feed_publish)
+
+```go
+package main
+
+import (
+    "fmt"
+    "log"
+
+    "github.com/steemit/steemgosdk"
+    "github.com/steemit/steemgosdk/broadcast"
+)
+
+func main() {
+    client := steemgosdk.GetClient("https://api.steemit.com")
+    bc := client.GetBroadcast()
+
+    rate := broadcast.ExchangeRate{
+        Base:  "0.500 SBD",
+        Quote: "1.000 STEEM",
+    }
+
+    // Use the witness account active key (WIF). Block signing keys cannot sign feed_publish.
+    result, err := bc.FeedPublish("your-witness-account", rate, "your-active-private-key")
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    fmt.Printf("feed_publish result: %s\n", string(result))
+}
+```
+
 ## Notes
 
 - **Security**: Never hardcode private keys or passwords in production code. Use environment variables or secure key management systems.

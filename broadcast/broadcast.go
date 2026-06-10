@@ -323,3 +323,24 @@ func (b *Broadcast) CustomJson(requiredAuths, requiredPostingAuths []string, id,
 
 	return b.Send([]protocol.Operation{op}, privKeys)
 }
+
+// ExchangeRate is the exchange_rate payload for feed_publish.
+type ExchangeRate struct {
+	Base  string // e.g. "0.500 SBD"
+	Quote string // e.g. "1.000 STEEM"
+}
+
+// FeedPublish broadcasts a feed_publish operation for a witness price feed.
+// privKeyWif must be the publisher account's active or owner private key (WIF format).
+// Witness block signing keys cannot be used for this operation.
+func (b *Broadcast) FeedPublish(publisher string, rate ExchangeRate, privKeyWif string) ([]byte, error) {
+	op := buildFeedPublishOperation(publisher, rate)
+	return b.SendWith(op, privKeyWif)
+}
+
+func buildFeedPublishOperation(publisher string, rate ExchangeRate) *protocol.FeedPublishOperation {
+	op := &protocol.FeedPublishOperation{Publisher: publisher}
+	op.ExchangeRate.Base = rate.Base
+	op.ExchangeRate.Quote = rate.Quote
+	return op
+}

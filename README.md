@@ -84,6 +84,24 @@ if err != nil {
 fmt.Println("✅ Vote submitted successfully!")
 ```
 
+### Witness Price Feed
+
+```go
+import "github.com/steemit/steemgosdk/broadcast"
+
+// Publish a witness price feed (requires active private key, not block signing key)
+bc := client.GetBroadcast()
+rate := broadcast.ExchangeRate{
+    Base:  "0.500 SBD",
+    Quote: "1.000 STEEM",
+}
+result, err := bc.FeedPublish("your-witness-account", rate, "your-active-private-key")
+if err != nil {
+    log.Fatal(err)
+}
+fmt.Printf("✅ Price feed published: %s\n", string(result))
+```
+
 ### Authenticated Calls (SignedCall)
 
 ```go
