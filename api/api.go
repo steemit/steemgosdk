@@ -361,3 +361,160 @@ func (a *API) GetOpsInBlocks(from, to uint, onlyVirtual bool) (opsMap map[uint][
 	}
 	return
 }
+
+// ---------------------------------------------------------------------------
+// Conveyor-facing convenience wrappers (G2).
+//
+// Each method below is a typed wrapper over CallWithResult for the
+// condenser_api / database_api calls that conveyor relies on heavily
+// (user-search, prices). Result structs are reused from steemutil's
+// protocol/api package; only AccountHistoryEntry (a [index, body] tuple) is
+// defined locally because its wire form is not a plain object.
+//
+// Note on parameter shape: condenser_api takes positional array params, not
+// named objects — e.g. get_accounts takes [["n1","n2"]] (array wrapping an
+// array), get_followers takes [account, start, followType, limit]. This is
+// verified against conveyor/src/user-search/client.ts.
+// ---------------------------------------------------------------------------
+
+// GetAccounts calls condenser_api.get_accounts.
+// The param is a positional array wrapping the names array: [["n1","n2"]].
+func (a *API) GetAccounts(names []string) ([]*protocolapi.ExtendedAccount, error) {
+	var result []*protocolapi.ExtendedAccount
+	if err := a.CallWithResult(
+		"condenser_api", "get_accounts",
+		[]interface{}{names},
+		&result,
+	); err != nil {
+		return nil, errors.Wrap(err, "failed to GetAccounts")
+	}
+	return result, nil
+}
+
+// GetFollowCount calls condenser_api.get_follow_count.
+// The param is a positional array: [account].
+func (a *API) GetFollowCount(account string) (*protocolapi.FollowCountReturn, error) {
+	var result protocolapi.FollowCountReturn
+	if err := a.CallWithResult(
+		"condenser_api", "get_follow_count",
+		[]interface{}{account},
+		&result,
+	); err != nil {
+		return nil, errors.Wrap(err, "failed to GetFollowCount")
+	}
+	return &result, nil
+}
+
+// GetFollowers calls condenser_api.get_followers.
+// followType is "blog" or "ignore". The param is a positional array:
+// [account, start, followType, limit].
+func (a *API) GetFollowers(account, start, followType string, limit int) ([]*protocolapi.FollowReturn, error) {
+	var result []*protocolapi.FollowReturn
+	if err := a.CallWithResult(
+		"condenser_api", "get_followers",
+		[]interface{}{account, start, followType, limit},
+		&result,
+	); err != nil {
+		return nil, errors.Wrap(err, "failed to GetFollowers")
+	}
+	return result, nil
+}
+
+// GetFollowing calls condenser_api.get_following.
+// followType is "blog" or "ignore". The param is a positional array:
+// [account, start, followType, limit].
+func (a *API) GetFollowing(account, start, followType string, limit int) ([]*protocolapi.FollowReturn, error) {
+	var result []*protocolapi.FollowReturn
+	if err := a.CallWithResult(
+		"condenser_api", "get_following",
+		[]interface{}{account, start, followType, limit},
+		&result,
+	); err != nil {
+		return nil, errors.Wrap(err, "failed to GetFollowing")
+	}
+	return result, nil
+}
+
+// GetAccountHistory calls condenser_api.get_account_history.
+//
+// from/limit follow conveyor's accountHistoryGenerator pagination convention
+// (src/user-search/client.ts): the first page uses from=-1 (newest), limit=1000;
+// subsequent pages step pointer backwards by limit, flooring at limit. This SDK
+// method returns a single page; the paging loop itself is driven by the caller.
+//
+// The param is a positional array: [account, from, limit].
+func (a *API) GetAccountHistory(account string, from int64, limit int) ([]*AccountHistoryEntry, error) {
+	var result []*AccountHistoryEntry
+	if err := a.CallWithResult(
+		"condenser_api", "get_account_history",
+		[]interface{}{account, from, limit},
+		&result,
+	); err != nil {
+		return nil, errors.Wrap(err, "failed to GetAccountHistory")
+	}
+	return result, nil
+}
+
+// LookupAccounts calls condenser_api.lookup_accounts for account-name
+// autocomplete. lowerBound is the prefix to search after; limit caps the
+// number of names returned. The param is a positional array:
+// [lowerBound, limit]. Returns the matched account names.
+func (a *API) LookupAccounts(lowerBound string, limit int) ([]string, error) {
+	var result []string
+	if err := a.CallWithResult(
+		"condenser_api", "lookup_accounts",
+		[]interface{}{lowerBound, limit},
+		&result,
+	); err != nil {
+		return nil, errors.Wrap(err, "failed to LookupAccounts")
+	}
+	return result, nil
+}
+
+// GetOrderBook calls condenser_api.get_order_book.
+//
+// condenser_api is used (rather than database_api) because condenser_api's
+// handlers take positional-array params, which is what this SDK's jsonrpc2
+// layer emits. database_api's get_order_book takes a named object {"limit":N},
+// which the current RpcSendData.Params ([]any) cannot represent.
+//
+// The param is a positional array: [limit].
+//
+// Convention note: steemd's json_rpc plugin supports two wire forms — the
+// dotted "api.method" form (used here, the current/preferred path per
+// json_rpc_plugin.cpp:288) and the legacy "call" form where method=="call"
+// and api/method are packed into params. New code uses the dotted form; the
+// "call" form is retained only for backwards compatibility and is slated for
+// retirement when steemutil's jsonrpc2 is cleaned up.
+func (a *API) GetOrderBook(limit int) (*protocolapi.OrderBook, error) {
+	var result protocolapi.OrderBook
+	if err := a.CallWithResult(
+		"condenser_api", "get_order_book",
+		[]interface{}{limit},
+		&result,
+	); err != nil {
+		return nil, errors.Wrap(err, "failed to GetOrderBook")
+	}
+	return &result, nil
+}
+
+// GetFeedHistory calls condenser_api.get_feed_history.
+//
+// condenser_api is used (rather than database_api) for the same reason as
+// GetOrderBook: condenser_api takes positional-array params (here an empty
+// array), matching what this SDK's jsonrpc2 layer emits. database_api's
+// get_feed_history takes a named object, which the current Params ([]any)
+// cannot represent. Takes no params.
+//
+// See GetOrderBook for the dotted-form-vs-call-form convention note.
+func (a *API) GetFeedHistory() (*protocolapi.FeedHistory, error) {
+	var result protocolapi.FeedHistory
+	if err := a.CallWithResult(
+		"condenser_api", "get_feed_history",
+		[]interface{}{},
+		&result,
+	); err != nil {
+		return nil, errors.Wrap(err, "failed to GetFeedHistory")
+	}
+	return &result, nil
+}
