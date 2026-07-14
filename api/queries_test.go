@@ -49,6 +49,64 @@ func mockRPCServer(t *testing.T, responses map[string]interface{}) *httptest.Ser
 	return server
 }
 
+// capturedRequest records one inbound JSON-RPC request's method + raw params,
+// so tests can assert the EXACT wire shape (positional array vs named object,
+// element order, types) — not just the response handling. This closes the gap
+// where an overly-permissive mock would pass even if the SDK sent the wrong
+// param shape (e.g. the database_api named-object bug this mock would have
+// caught if it had checked params).
+type capturedRequest struct {
+	Method string
+	Params json.RawMessage
+}
+
+// mockRPCServerCapture is like mockRPCServer but also records each request's
+// method and raw params into *captured for the test to inspect.
+func mockRPCServerCapture(t *testing.T, responses map[string]interface{}, captured *[]capturedRequest) *httptest.Server {
+	t.Helper()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		var req struct {
+			Method string          `json:"method"`
+			Params json.RawMessage `json:"params"`
+		}
+		if err := json.Unmarshal(body, &req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		*captured = append(*captured, capturedRequest{Method: req.Method, Params: req.Params})
+		result, ok := responses[req.Method]
+		if !ok {
+			http.Error(w, "no mock for method: "+req.Method, http.StatusBadRequest)
+			return
+		}
+		envelope := map[string]interface{}{
+			"jsonrpc": "2.0",
+			"id":      1,
+			"result":  result,
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(envelope)
+	}))
+	t.Cleanup(server.Close)
+	return server
+}
+
+// assertParamsArray asserts that raw is a JSON positional array and returns
+// its decoded elements. Fails the test if raw is not an array.
+func assertParamsArray(t *testing.T, raw json.RawMessage) []interface{} {
+	t.Helper()
+	var arr []interface{}
+	if err := json.Unmarshal(raw, &arr); err != nil {
+		t.Fatalf("expected params to be a JSON array, got %s: %v", string(raw), err)
+	}
+	return arr
+}
+
 func TestGetAccounts(t *testing.T) {
 	// Real-shaped condenser_api.get_accounts response: an array with one
 	// ExtendedAccount whose posting authority has a single key_auth pair
@@ -191,7 +249,7 @@ func TestLookupAccounts(t *testing.T) {
 
 func TestGetOrderBook(t *testing.T) {
 	server := mockRPCServer(t, map[string]interface{}{
-		"database_api.get_order_book": map[string]interface{}{
+		"condenser_api.get_order_book": map[string]interface{}{
 			"asks": []map[string]interface{}{
 				{"order_price": map[string]interface{}{"base": "1.000 SBD", "quote": "2.000 STEEM"}},
 			},
@@ -219,7 +277,7 @@ func TestGetOrderBook(t *testing.T) {
 
 func TestGetFeedHistory(t *testing.T) {
 	server := mockRPCServer(t, map[string]interface{}{
-		"database_api.get_feed_history": map[string]interface{}{
+		"condenser_api.get_feed_history": map[string]interface{}{
 			"price_history": []map[string]interface{}{
 				{"base": "0.500 SBD", "quote": "1.000 STEEM"},
 				{"base": "0.510 SBD", "quote": "1.000 STEEM"},

@@ -471,13 +471,25 @@ func (a *API) LookupAccounts(lowerBound string, limit int) ([]string, error) {
 	return result, nil
 }
 
-// GetOrderBook calls database_api.get_order_book.
-// Uses database_api (not condenser_api) to match conveyor/src/price.ts. The
-// param is a positional array: [limit].
+// GetOrderBook calls condenser_api.get_order_book.
+//
+// condenser_api is used (rather than database_api) because condenser_api's
+// handlers take positional-array params, which is what this SDK's jsonrpc2
+// layer emits. database_api's get_order_book takes a named object {"limit":N},
+// which the current RpcSendData.Params ([]any) cannot represent.
+//
+// The param is a positional array: [limit].
+//
+// Convention note: steemd's json_rpc plugin supports two wire forms — the
+// dotted "api.method" form (used here, the current/preferred path per
+// json_rpc_plugin.cpp:288) and the legacy "call" form where method=="call"
+// and api/method are packed into params. New code uses the dotted form; the
+// "call" form is retained only for backwards compatibility and is slated for
+// retirement when steemutil's jsonrpc2 is cleaned up.
 func (a *API) GetOrderBook(limit int) (*protocolapi.OrderBook, error) {
 	var result protocolapi.OrderBook
 	if err := a.CallWithResult(
-		"database_api", "get_order_book",
+		"condenser_api", "get_order_book",
 		[]interface{}{limit},
 		&result,
 	); err != nil {
@@ -486,13 +498,19 @@ func (a *API) GetOrderBook(limit int) (*protocolapi.OrderBook, error) {
 	return &result, nil
 }
 
-// GetFeedHistory calls database_api.get_feed_history.
-// Uses database_api (not condenser_api) to match conveyor/src/price.ts. Takes
-// no params.
+// GetFeedHistory calls condenser_api.get_feed_history.
+//
+// condenser_api is used (rather than database_api) for the same reason as
+// GetOrderBook: condenser_api takes positional-array params (here an empty
+// array), matching what this SDK's jsonrpc2 layer emits. database_api's
+// get_feed_history takes a named object, which the current Params ([]any)
+// cannot represent. Takes no params.
+//
+// See GetOrderBook for the dotted-form-vs-call-form convention note.
 func (a *API) GetFeedHistory() (*protocolapi.FeedHistory, error) {
 	var result protocolapi.FeedHistory
 	if err := a.CallWithResult(
-		"database_api", "get_feed_history",
+		"condenser_api", "get_feed_history",
 		[]interface{}{},
 		&result,
 	); err != nil {
