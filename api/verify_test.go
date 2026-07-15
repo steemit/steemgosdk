@@ -73,12 +73,18 @@ func TestVerifySignedRequest_Success(t *testing.T) {
 	if acct != g1TestAcct {
 		t.Errorf("expected account %s, got %s", g1TestAcct, acct)
 	}
-	// The decoded plaintext params should round-trip to what we signed.
-	if len(params) != 2 {
-		t.Fatalf("expected 2 params, got %d", len(params))
+	// VerifySignedRequest now returns interface{} (shape-agnostic, matching
+	// steemutil v0.0.26 rpc.Validate). The signed params were an array, so
+	// type-assert before indexing.
+	arr, ok := params.([]interface{})
+	if !ok {
+		t.Fatalf("expected params to be []interface{}, got %T", params)
 	}
-	if params[0] != "hello" {
-		t.Errorf("expected params[0]=hello, got %v", params[0])
+	if len(arr) != 2 {
+		t.Fatalf("expected 2 params, got %d", len(arr))
+	}
+	if arr[0] != "hello" {
+		t.Errorf("expected params[0]=hello, got %v", arr[0])
 	}
 }
 

@@ -15,9 +15,13 @@ import (
 // behavior of @steemit/koa-jsonrpc.
 //
 // On success it returns the decoded plaintext params and the authenticated
-// account name. On failure the error comes from steemutil's rpc.Validate
-// (envelope/freshness) or rpc.VerifySignedRpc (cryptographic check).
-func (a *API) VerifySignedRequest(signedReq *rpc.SignedRequest) (params []interface{}, account string, err error) {
+// account name. The params are returned as interface{} (matching steemutil
+// v0.0.26+ rpc.Validate), preserving whatever JSON shape the client signed —
+// typically a JSON object (e.g. {"account":"foo"}) for conveyor/koa-jsonrpc
+// clients, but arrays and scalars are also valid. On failure the error comes
+// from steemutil's rpc.Validate (envelope/freshness) or rpc.VerifySignedRpc
+// (cryptographic check).
+func (a *API) VerifySignedRequest(signedReq *rpc.SignedRequest) (params interface{}, account string, err error) {
 	account = signedReq.Params.Signed.Account
 
 	// accountFetcher implements rpc.AccountFetcher by looking up the account's
