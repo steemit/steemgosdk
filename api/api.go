@@ -391,6 +391,20 @@ func (a *API) GetAccounts(names []string) ([]*protocolapi.ExtendedAccount, error
 	return result, nil
 }
 
+// GetContent calls condenser_api.get_content.
+// The params form a positional array: [author, permlink].
+func (a *API) GetContent(author, permlink string) (*protocolapi.Content, error) {
+	var result protocolapi.Content
+	if err := a.CallWithResult(
+		"condenser_api", "get_content",
+		[]interface{}{author, permlink},
+		&result,
+	); err != nil {
+		return nil, errors.Wrap(err, "failed to GetContent")
+	}
+	return &result, nil
+}
+
 // GetFollowCount calls condenser_api.get_follow_count.
 // The param is a positional array: [account].
 func (a *API) GetFollowCount(account string) (*protocolapi.FollowCountReturn, error) {
