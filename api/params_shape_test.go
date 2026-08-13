@@ -56,6 +56,32 @@ func TestGetAccounts_ParamsShape(t *testing.T) {
 	}
 }
 
+func TestGetContent_ParamsShape(t *testing.T) {
+	var captured []capturedRequest
+	server := mockRPCServerCapture(t, map[string]interface{}{
+		"condenser_api.get_content": emptyResult,
+	}, &captured)
+	api := NewAPI(server.URL)
+
+	_, _ = api.GetContent("rme", "fun-meme-puss-logo")
+
+	c := captured[0]
+	if c.Method != "condenser_api.get_content" {
+		t.Fatalf("expected method condenser_api.get_content, got %s", c.Method)
+	}
+	// get_content takes [author, permlink] — a 2-element positional array.
+	arr := assertParamsArray(t, c.Params)
+	if len(arr) != 2 {
+		t.Fatalf("expected 2 params, got %d", len(arr))
+	}
+	if arr[0] != "rme" {
+		t.Errorf("expected param[0]=rme (author), got %v", arr[0])
+	}
+	if arr[1] != "fun-meme-puss-logo" {
+		t.Errorf("expected param[1]=fun-meme-puss-logo (permlink), got %v", arr[1])
+	}
+}
+
 func TestGetFollowCount_ParamsShape(t *testing.T) {
 	var captured []capturedRequest
 	server := mockRPCServerCapture(t, map[string]interface{}{
@@ -245,6 +271,7 @@ func TestParamsShape_IsArrayNotObject(t *testing.T) {
 		call   func(a *API) error
 	}{
 		{"GetAccounts", "condenser_api.get_accounts", func(a *API) error { _, e := a.GetAccounts([]string{"x"}); return e }},
+		{"GetContent", "condenser_api.get_content", func(a *API) error { _, e := a.GetContent("x", "y"); return e }},
 		{"GetFollowCount", "condenser_api.get_follow_count", func(a *API) error { _, e := a.GetFollowCount("x"); return e }},
 		{"GetFollowers", "condenser_api.get_followers", func(a *API) error { _, e := a.GetFollowers("x", "", "blog", 1); return e }},
 		{"GetFollowing", "condenser_api.get_following", func(a *API) error { _, e := a.GetFollowing("x", "", "blog", 1); return e }},

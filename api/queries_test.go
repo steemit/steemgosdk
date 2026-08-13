@@ -160,6 +160,116 @@ func TestGetAccounts(t *testing.T) {
 	}
 }
 
+// TestGetContent verifies the get_content wrapper decodes a discussion object,
+// including the share_type fields that steemd emits inconsistently as JSON
+// number (small value) or JSON string (large value). The fixture deliberately
+// mixes both forms: top-level net_rshares is a string while total_vote_weight
+// is a number, and within active_votes vote[0].rshares is a string while
+// vote[1].rshares is a number.
+func TestGetContent(t *testing.T) {
+	server := mockRPCServer(t, map[string]interface{}{
+		"condenser_api.get_content": map[string]interface{}{
+			"id":                 113900934,
+			"author":             "rme",
+			"permlink":           "fun-meme-puss-logo",
+			"category":           "hive-129948",
+			"parent_author":      "",
+			"parent_permlink":    "hive-129948",
+			"title":              "FUN MEME",
+			"body":               "<trimmed>",
+			"json_metadata":      `{"tags":["meme"]}`,
+			"created":            "2026-08-12T13:00:06",
+			"last_payout":        "1970-01-01T00:00:00",
+			"depth":              0,
+			"children":           1,
+			"net_votes":          271,
+			// share_type fields: large value emitted as a JSON STRING.
+			"net_rshares":            "1605718787099101",
+			"abs_rshares":            "1605718787099101",
+			"children_abs_rshares":   "1605718787099101",
+			"author_reputation":      "30678045089626224",
+			// share_type field: small value emitted as a JSON NUMBER.
+			"total_vote_weight": 39390711,
+			"author_rewards":    0,
+			"reward_weight":     10000,
+			// asset strings stay strings.
+			"pending_payout_value":  "229.377 SBD",
+			"max_accepted_payout":   "1000000.000 SBD",
+			"allow_votes":           true,
+			"allow_replies":         true,
+			"allow_curation_rewards": true,
+			"beneficiaries":         []interface{}{},
+			"replies":               []interface{}{},
+			"reblogged_by":          []interface{}{},
+			// active_votes with MIXED rshares forms within one response.
+			"active_votes": []map[string]interface{}{
+				{
+					"voter":      "xpilar",
+					"weight":     8597, // number form
+					"rshares":    "221646137396", // string form (large)
+					"reputation": 0,
+					"percent":    1000,
+					"time":       "2026-08-12T13:01:30",
+				},
+				{
+					"voter":      "xiaohui",
+					"weight":     "28", // string form
+					"rshares":    2125781185, // number form (small)
+					"reputation": 0,
+					"percent":    5672,
+					"time":       "2026-08-12T13:06:09",
+				},
+			},
+		},
+	})
+	api := NewAPI(server.URL)
+
+	c, err := api.GetContent("rme", "fun-meme-puss-logo")
+	if err != nil {
+		t.Fatalf("GetContent failed: %v", err)
+	}
+	if c.Author != "rme" || c.Permlink != "fun-meme-puss-logo" {
+		t.Errorf("author/permlink: got %q/%q", c.Author, c.Permlink)
+	}
+	if c.ID != 113900934 {
+		t.Errorf("id: got %d", c.ID)
+	}
+	if c.PendingPayoutValue != "229.377 SBD" {
+		t.Errorf("pending_payout_value: got %q", c.PendingPayoutValue)
+	}
+	if !c.AllowVotes || !c.AllowReplies || !c.AllowCurationRewards {
+		t.Errorf("allow_*: want all true")
+	}
+
+	// share_type fields: both JSON forms must decode (RawMessage captures verbatim).
+	if string(c.NetRshares) != `"1605718787099101"` {
+		t.Errorf("net_rshares (string form): got %q", string(c.NetRshares))
+	}
+	if string(c.TotalVoteWeight) != "39390711" {
+		t.Errorf("total_vote_weight (number form): got %q", string(c.TotalVoteWeight))
+	}
+
+	// active_votes with mixed rshares forms.
+	if len(c.ActiveVotes) != 2 {
+		t.Fatalf("active_votes len: got %d", len(c.ActiveVotes))
+	}
+	if c.ActiveVotes[0].Voter != "xpilar" {
+		t.Errorf("active_votes[0].voter: got %q", c.ActiveVotes[0].Voter)
+	}
+	if string(c.ActiveVotes[0].Rshares) != `"221646137396"` {
+		t.Errorf("active_votes[0].rshares (string form): got %q", string(c.ActiveVotes[0].Rshares))
+	}
+	if string(c.ActiveVotes[0].Weight) != "8597" {
+		t.Errorf("active_votes[0].weight (number form): got %q", string(c.ActiveVotes[0].Weight))
+	}
+	if string(c.ActiveVotes[1].Rshares) != "2125781185" {
+		t.Errorf("active_votes[1].rshares (number form): got %q", string(c.ActiveVotes[1].Rshares))
+	}
+	if string(c.ActiveVotes[1].Weight) != `"28"` {
+		t.Errorf("active_votes[1].weight (string form): got %q", string(c.ActiveVotes[1].Weight))
+	}
+}
+
 func TestGetFollowCount(t *testing.T) {
 	server := mockRPCServer(t, map[string]interface{}{
 		"condenser_api.get_follow_count": map[string]interface{}{
