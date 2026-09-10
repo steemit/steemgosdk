@@ -1,10 +1,24 @@
-package api
+package v2
 
 import (
 	"encoding/json"
 
 	"github.com/pkg/errors"
+	"github.com/steemit/steemutil/protocol"
+	protocolapi "github.com/steemit/steemutil/protocol/api"
 )
+
+// WrapBlock represents a block with its block number.
+type WrapBlock struct {
+	BlockNum uint
+	Block    *protocolapi.Block
+}
+
+// WrapOpsInBlock represents operations in a block with its block number.
+type WrapOpsInBlock struct {
+	BlockNum   uint
+	Operations []*protocol.OperationObject
+}
 
 // AccountHistoryEntry models a single element of a
 // condenser_api.get_account_history response.

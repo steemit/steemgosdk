@@ -71,6 +71,49 @@ fmt.Printf("Account: %s, Raw Reputation: %d, Reputation Score: %d\n",
     accounts[0].Name, rawRep, repLog10)
 ```
 
+### Making API Calls (api/v2 — recommended)
+
+`api/v2` is the context-aware face of the SDK: every method takes a
+`context.Context`, transient failures are retried once at the transport layer
+(bounded, with exponential backoff), range methods fetch with bounded
+concurrency, and requests carry a per-attempt timeout (default 15s).
+
+```go
+import (
+    "context"
+    "time"
+
+    apiv2 "github.com/steemit/steemgosdk/api/v2"
+)
+
+api := apiv2.NewAPI("https://api.steemit.com",
+    apiv2.WithConcurrency(32), // range-method workers (default 16, max 64)
+    apiv2.WithTimeout(15*time.Second),
+)
+
+accounts, err := api.GetAccounts(context.Background(), []string{"steemit"})
+
+// Range fetches run on a bounded worker pool; partial failures return the
+// successful blocks alongside a *apiv2.RangeError listing failed block numbers.
+blocks, err := api.GetBlocks(context.Background(), 20_000_000, 20_001_000)
+```
+
+Recommended catch-up loop shape (steemdb-sync/live_sync): use
+`GetDynamicGlobalProperties(ctx).LastIrreversibleBlockNum` as the window end
+each round, sleep ~3s when caught up, and never probe for the chain head via
+error paths — `apiv2.ErrBlockNotFound` is a defensive signal only (bad range
+bounds or node anomalies).
+
+The context-free `client.GetAPI()` methods still work (they delegate to
+api/v2) but are deprecated; they now include transport-level retry, so drop
+any outer retry loops when migrating.
+
+**Behavior change:** `GetBlock` for a block number beyond the head now
+returns `apiv2.ErrBlockNotFound` on the first attempt — previously it
+silently returned a zero-value block. See [CHANGELOG.md](CHANGELOG.md) for
+all behavior changes and [MIGRATION.md](MIGRATION.md) for the full
+migration checklist.
+
 ### Broadcasting Transactions
 
 ```go
