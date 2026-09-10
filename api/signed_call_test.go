@@ -112,7 +112,7 @@ func TestAPI_validateTransportForSignedCall(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			api := NewAPI(tt.url)
 			err := api.validateTransportForSignedCall()
-			
+
 			if (err != nil) != tt.wantErr {
 				t.Errorf("validateTransportForSignedCall() error = %v, wantErr %v", err, tt.wantErr)
 			}
@@ -120,25 +120,7 @@ func TestAPI_validateTransportForSignedCall(t *testing.T) {
 	}
 }
 
-func TestAPI_SeqNoIncrement(t *testing.T) {
-	api := NewAPI(testURL)
-	
-	initialSeqNo := api.seqNo
-	
-	// Make a signed call (will fail at network level, but should increment seqNo)
-	api.SignedCall(testMethod, testParams, testAccount, testPrivateKey)
-	
-	if api.seqNo != initialSeqNo+1 {
-		t.Errorf("Expected seqNo to increment from %d to %d, got %d", initialSeqNo, initialSeqNo+1, api.seqNo)
-	}
-	
-	// Make another call
-	api.SignedCall(testMethod, testParams, testAccount, testPrivateKey)
-	
-	if api.seqNo != initialSeqNo+2 {
-		t.Errorf("Expected seqNo to increment to %d, got %d", initialSeqNo+2, api.seqNo)
-	}
-}
+// TestAPI_SeqNoIncrement moved to api/v2 (the seqNo field now lives there).
 
 // Benchmark tests
 func BenchmarkAPI_SignedCall(b *testing.B) {

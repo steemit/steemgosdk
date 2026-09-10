@@ -51,7 +51,7 @@ func (a *API) CallWithResult(ctx context.Context, apiName, method string, params
 // re-executed by a naive retry). Per-attempt timeout and ctx cancellation
 // still apply.
 func (a *API) SignedCall(ctx context.Context, method string, params []interface{}, account string, privateKey string) (*protocolapi.RpcResultData, error) {
-	if err := a.validateTransportForSignedCall(); err != nil {
+	if err := a.ValidateTransportForSignedCall(); err != nil {
 		return nil, err
 	}
 
@@ -115,12 +115,14 @@ func (a *API) SignedCallWithResult(ctx context.Context, method string, params []
 	return nil
 }
 
-// validateTransportForSignedCall ensures that signed calls are only made over
+// ValidateTransportForSignedCall ensures that signed calls are only made over
 // HTTP. WebSocket transport is not supported for signed calls due to the
 // nature of the signing protocol.
-func (a *API) validateTransportForSignedCall() error {
+func (a *API) ValidateTransportForSignedCall() error {
 	if !strings.HasPrefix(a.url, "http://") && !strings.HasPrefix(a.url, "https://") {
-		return fmt.Errorf("steemgosdk: signed calls can only be made when using HTTP transport")
+		// Message kept byte-identical to the legacy api package's error —
+		// consumers match on it.
+		return fmt.Errorf("signed calls can only be made when using HTTP transport")
 	}
 	return nil
 }

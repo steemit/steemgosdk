@@ -149,4 +149,18 @@ func TestSignedCall_Success(t *testing.T) {
 	}
 }
 
+func TestSignedCall_SeqNoIncrements(t *testing.T) {
+	node := newFakeNode(t, func(hit int64, w http.ResponseWriter) {
+		writeJSON(w, http.StatusInternalServerError, `{"id":1,"jsonrpc":"2.0","result":null}`)
+	})
+	a := fastAPI(t, node.srv.URL)
+
+	initial := a.seqNo
+	_, _ = a.SignedCall(context.Background(), "m", []interface{}{"p"}, "acct", testWIF)
+	_, _ = a.SignedCall(context.Background(), "m", []interface{}{"p"}, "acct", testWIF)
+	if a.seqNo != initial+2 {
+		t.Errorf("seqNo = %d after two signed calls, want %d", a.seqNo, initial+2)
+	}
+}
+
 const testWIF = "5JLw5dgQAx6rhZEgNN5C2ds1V47RweGshynFSWFbaMohsYsBvE8"
