@@ -50,6 +50,9 @@ func NewAPI(url string, opts ...Option) *API {
 	if a.httpClient == nil {
 		tr := http.DefaultTransport.(*http.Transport).Clone()
 		tr.MaxIdleConnsPerHost = a.concurrency
+		// The floor of 100 matches http.DefaultTransport's own default, so a
+		// small-concurrency instance is no more eager than the stdlib; idle
+		// connections are opened on demand, the cap allocates nothing up front.
 		tr.MaxIdleConns = 2 * a.concurrency
 		if tr.MaxIdleConns < 100 {
 			tr.MaxIdleConns = 100

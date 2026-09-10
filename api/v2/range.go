@@ -49,20 +49,31 @@ func runRange[T any](ctx context.Context, a *API, from, to uint, fetchOne func(c
 		}()
 	}
 
+	// Cancellation/ownership model: jobs are handed off strictly in order on
+	// an unbuffered channel, so while the sender is trying to dispatch idx it
+	// exclusively owns every index >= idx. To keep that sound without a mutex
+	// — and without relying on the ordering invariant — the sender never
+	// writes shared slices directly: the never-dispatched tail is recorded
+	// and filled in only after wg.Wait(), when all workers are done. (Do not
+	// buffer this channel: buffered jobs could be in flight inside workers
+	// at the same time the sender marks them unsent.)
 	sending := true
+	unsentFrom := n
 	for idx := 0; idx < n && sending; idx++ {
 		select {
 		case jobs <- idx:
 		case <-ctx.Done():
-			for j := idx; j < n; j++ {
-				errs[j] = ctx.Err()
-				done[j] = true
-			}
+			unsentFrom = idx
 			sending = false
 		}
 	}
 	close(jobs)
 	wg.Wait()
+
+	for j := unsentFrom; j < n; j++ {
+		errs[j] = ctx.Err()
+		done[j] = true
+	}
 
 	// Defensive: every index must be accounted for by now.
 	for idx := 0; idx < n; idx++ {

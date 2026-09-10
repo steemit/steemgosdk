@@ -108,6 +108,12 @@ The context-free `client.GetAPI()` methods still work (they delegate to
 api/v2) but are deprecated; they now include transport-level retry, so drop
 any outer retry loops when migrating.
 
+**Behavior change:** `GetBlock` for a block number beyond the head now
+returns `apiv2.ErrBlockNotFound` on the first attempt — previously it
+silently returned a zero-value block. See [CHANGELOG.md](CHANGELOG.md) for
+all behavior changes and [MIGRATION.md](MIGRATION.md) for the full
+migration checklist.
+
 ### Broadcasting Transactions
 
 ```go

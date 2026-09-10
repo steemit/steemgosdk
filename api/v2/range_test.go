@@ -285,3 +285,52 @@ func TestGetOpsInBlocks_PartialFailure(t *testing.T) {
 		t.Errorf("block 5000 ops = %d, want 1", len(opsMap[5000]))
 	}
 }
+
+// TestGetBlocks_CancelStorm hammers the cancellation path under -race: a mix
+// of instantly-succeeding and forever-failing blocks, with the context
+// canceled mid-range. Every block must end up either in the results or in
+// Failures — no silent holes — and the returned error must unwrap to
+// context.Canceled.
+func TestGetBlocks_CancelStorm(t *testing.T) {
+	const from, to uint = 6000, 6200
+	failEveryThird := make(map[uint]func(attempt int64) (int, string), 40)
+	for n := from; n < to; n++ {
+		if n%3 == 0 {
+			failEveryThird[n] = alwaysFail
+		}
+	}
+	srv := newBlockServer(t, failEveryThird)
+
+	for round := 0; round < 5; round++ {
+		a := NewAPI(srv.srv.URL, WithConcurrency(8))
+		a.baseBackoff = time.Millisecond
+
+		ctx, cancel := context.WithCancel(context.Background())
+		go func() {
+			time.Sleep(25 * time.Millisecond)
+			cancel()
+		}()
+
+		blocks, err := a.GetBlocks(ctx, from, to)
+		if err == nil {
+			t.Fatalf("round %d: expected error after cancel", round)
+		}
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("round %d: expected context.Canceled in chain, got: %v", round, err)
+		}
+		var rErr *RangeError
+		if !errors.As(err, &rErr) {
+			t.Fatalf("round %d: expected *RangeError, got %T", round, err)
+		}
+		if got := len(rErr.Failures) + len(blocks); got != int(to-from) {
+			t.Fatalf("round %d: %d blocks unaccounted (results %d + failures %d != %d)",
+				round, int(to-from)-got, len(blocks), len(rErr.Failures), to-from)
+		}
+		for _, wb := range blocks {
+			if wb.BlockNum%3 == 0 {
+				t.Fatalf("round %d: scripted-failing block %d must not be in results", round, wb.BlockNum)
+			}
+		}
+		cancel()
+	}
+}

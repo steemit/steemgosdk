@@ -273,3 +273,29 @@ func TestWithConcurrencyClamps(t *testing.T) {
 		t.Errorf("WithConcurrency(1000) = %d, want clamp %d", a.concurrency, maxConcurrency)
 	}
 }
+
+// TestHTTPStatusFormatPinned pins the coupling between this package's
+// classification and steemutil jsonrpc2's non-200 error string. The two
+// repos are released together; if the format ever drifts, this test fails
+// at build time instead of the classifier silently misclassifying HTTP
+// statuses (drifted errors fall back to generic retryable network errors).
+func TestHTTPStatusFormatPinned(t *testing.T) {
+	cases := []struct {
+		msg  string
+		want int
+		ok   bool
+	}{
+		{`failed to response(http code): 429`, 429, true},
+		{`failed to response(http code): 503`, 503, true},
+		{`Post "http://node": failed to response(http code): 500`, 500, true},
+		{`Post "http://node": dial tcp: connection refused`, 0, false},
+		{`some unrelated error`, 0, false},
+	}
+	for _, c := range cases {
+		got, ok := httpStatusFromTransportError(errors.New(c.msg))
+		if ok != c.ok || got != c.want {
+			t.Errorf("httpStatusFromTransportError(%q) = (%d, %v), want (%d, %v)",
+				c.msg, got, ok, c.want, c.ok)
+		}
+	}
+}
