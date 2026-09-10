@@ -24,6 +24,10 @@ type API struct {
 	// attempts (100ms, 200ms, 400ms by default). Tests lower it to keep
 	// retry-path tests fast; production callers have no reason to touch it.
 	baseBackoff time.Duration
+
+	// seqNo sequences signed-call request IDs (atomic; SignedCall is safe
+	// for concurrent use).
+	seqNo int64
 }
 
 // NewAPI creates an API instance for the given RPC endpoint (HTTP/HTTPS).
