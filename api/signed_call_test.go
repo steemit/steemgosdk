@@ -19,7 +19,7 @@ func TestAPI_SignedCall(t *testing.T) {
 
 	// Test basic signed call structure (this will fail at network level in tests, but should pass validation)
 	_, err := api.SignedCall(testMethod, testParams, testAccount, testPrivateKey)
-	
+
 	// We expect a network error in test environment, not a validation error
 	if err == nil {
 		t.Log("Signed call succeeded (unexpected in test environment)")
@@ -68,7 +68,7 @@ func TestAPI_SignedCallWithResult(t *testing.T) {
 
 	var result []map[string]interface{}
 	err := api.SignedCallWithResult(testMethod, testParams, testAccount, testPrivateKey, &result)
-	
+
 	// We expect a network error in test environment
 	if err != nil {
 		t.Logf("Expected error in test environment: %v", err)
@@ -125,7 +125,7 @@ func TestAPI_validateTransportForSignedCall(t *testing.T) {
 // Benchmark tests
 func BenchmarkAPI_SignedCall(b *testing.B) {
 	api := NewAPI(testURL)
-	
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		// This will fail at network level, but we're measuring the signing overhead
@@ -135,7 +135,7 @@ func BenchmarkAPI_SignedCall(b *testing.B) {
 
 func BenchmarkAPI_validateTransportForSignedCall(b *testing.B) {
 	api := NewAPI(testURL)
-	
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		api.validateTransportForSignedCall()
