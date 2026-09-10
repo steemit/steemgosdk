@@ -2,7 +2,7 @@ module github.com/steemit/steemgosdk
 
 go 1.18
 
-require github.com/steemit/steemutil v0.0.30
+require github.com/steemit/steemutil v0.0.31-0.20260910081958-91ce6248753b
 
 require github.com/pkg/errors v0.9.1
 
@@ -15,5 +15,3 @@ require (
 	golang.org/x/crypto v0.8.0 // indirect
 	golang.org/x/sys v0.7.0 // indirect
 )
-
-replace github.com/steemit/steemutil => ../steemutil
