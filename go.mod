@@ -2,7 +2,7 @@ module github.com/steemit/steemgosdk
 
 go 1.18
 
-require github.com/steemit/steemutil v0.0.31-0.20260910100345-224de478f1eb
+require github.com/steemit/steemutil v0.0.31
 
 require github.com/pkg/errors v0.9.1
 
