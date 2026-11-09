@@ -210,10 +210,20 @@ func (b *Broadcast) prepareTransaction(ops []protocol.Operation) (*transaction.S
 
 	// Calculate ref_block_num from last_irreversible_block_num
 	// ref_block_num = (last_irreversible_block_num - 1) & 0xFFFF
-	refBlockNum := transaction.RefBlockNum(protocol.UInt32((dgp.LastIrreversibleBlockNum - 1) & 0xFFFF))
+	//
+	// On a fresh chain (first ~STEEM_MAX_WITNESSES blocks after genesis) the
+	// LIB is still 0 and condenser_api.get_block(0) returns null (the genesis
+	// block is not fetchable), which made transaction preparation fail for
+	// exactly the fresh-testnet use case. Clamp to 1: any recent block is a
+	// valid TAPOS reference, and block 1 always exists.
+	lib := dgp.LastIrreversibleBlockNum
+	if lib < 1 {
+		lib = 1
+	}
+	refBlockNum := transaction.RefBlockNum(protocol.UInt32((lib - 1) & 0xFFFF))
 
 	// Get the block at last_irreversible_block_num to get its previous block ID
-	block, err := b.api.GetBlock(uint(dgp.LastIrreversibleBlockNum))
+	block, err := b.api.GetBlock(uint(lib))
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get block for ref_block_prefix calculation")
 	}
