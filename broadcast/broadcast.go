@@ -18,18 +18,40 @@ import (
 
 // Broadcast provides methods to sign and broadcast transactions.
 type Broadcast struct {
-	url string
-	rpc *jsonrpc2.JsonRpc
-	api *api.API
+	url   string
+	rpc   *jsonrpc2.JsonRpc
+	api   *api.API
+	chain *transaction.Chain
 }
 
-// NewBroadcast creates a new Broadcast instance.
+// NewBroadcast creates a new Broadcast instance signing for Steem mainnet.
 func NewBroadcast(url string) *Broadcast {
-	return &Broadcast{
-		url: url,
-		rpc: jsonrpc2.NewClient(url),
-		api: api.NewAPI(url), // Create API instance internally for getting dynamic global properties
+	return NewBroadcastWithChain(url, transaction.SteemChain)
+}
+
+// NewBroadcastWithChain creates a new Broadcast instance signing for the
+// given chain (e.g. transaction.TestChain for the Steem testnet, whose
+// chain ID differs from mainnet and therefore changes the signature
+// digest). A nil chain falls back to Steem mainnet.
+func NewBroadcastWithChain(url string, chain *transaction.Chain) *Broadcast {
+	if chain == nil {
+		chain = transaction.SteemChain
 	}
+	return &Broadcast{
+		url:   url,
+		rpc:   jsonrpc2.NewClient(url),
+		api:   api.NewAPI(url), // Create API instance internally for getting dynamic global properties
+		chain: chain,
+	}
+}
+
+// SetChain replaces the chain used for signing. A nil chain resets to
+// Steem mainnet. Must be called before Send.
+func (b *Broadcast) SetChain(chain *transaction.Chain) {
+	if chain == nil {
+		chain = transaction.SteemChain
+	}
+	b.chain = chain
 }
 
 // BroadcastSync broadcasts a transaction synchronously to the Steem blockchain.
@@ -98,7 +120,7 @@ func (b *Broadcast) Send(ops []protocol.Operation, privKeys map[string]string) (
 		fmt.Printf("=== Transaction Bytes (hex) ===\n%s\n", hex.EncodeToString(txBytes))
 
 		// Compute and print digest for testing
-		digest, err := tx.Digest(transaction.SteemChain)
+		digest, err := tx.Digest(b.chain)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to compute digest")
 		}
@@ -116,13 +138,13 @@ func (b *Broadcast) Send(ops []protocol.Operation, privKeys map[string]string) (
 	}
 
 	// Sign transaction
-	if err := tx.Sign(privKeyObjs, transaction.SteemChain); err != nil {
+	if err := tx.Sign(privKeyObjs, b.chain); err != nil {
 		return nil, errors.Wrap(err, "failed to sign transaction")
 	}
 
 	// Debug: Verify signature recovery if DEBUG is set
 	if os.Getenv("DEBUG") != "" && len(tx.Transaction.Signatures) > 0 {
-		digest, err := tx.Digest(transaction.SteemChain)
+		digest, err := tx.Digest(b.chain)
 		if err == nil {
 			// Decode first signature
 			sigHex := tx.Transaction.Signatures[0]
@@ -256,7 +278,7 @@ func (b *Broadcast) SendAsync(ops []protocol.Operation, privKeys map[string]stri
 	}
 
 	// Sign transaction
-	if err := tx.Sign(privKeyObjs, transaction.SteemChain); err != nil {
+	if err := tx.Sign(privKeyObjs, b.chain); err != nil {
 		return "", errors.Wrap(err, "failed to sign transaction")
 	}
 
